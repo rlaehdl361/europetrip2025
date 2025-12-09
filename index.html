@@ -36,6 +36,11 @@
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
         }
+        /* 텍스트 크기 변경 시 부드러운 전환을 위한 트랜지션 최적화 */
+        .header-text {
+            will-change: font-size, line-height;
+            transition: font-size 0.3s ease-out, line-height 0.3s ease-out;
+        }
     </style>
 </head>
 <body class="bg-[#FEF0E4]">
@@ -224,7 +229,7 @@
             const [activeTab, setActiveTab] = useState('itinerary');
             const [recommendSubTab, setRecommendSubTab] = useState('places'); 
             const [selectedDay, setSelectedDay] = useState(1);
-            const [mapViewMode, setMapViewMode] = useState('real'); // 4. 기본값을 real(Google Map)로 변경
+            const [mapViewMode, setMapViewMode] = useState('real'); 
             const [selectedLocation, setSelectedLocation] = useState(null);
             const [isEditMode, setIsEditMode] = useState(false);
             const [isScrolled, setIsScrolled] = useState(false);
@@ -233,7 +238,7 @@
             const [passwordInput, setPasswordInput] = useState("");
             const [passwordError, setPasswordError] = useState(false);
             
-            // 2. 재료 수정용 임시 저장소 (편집 중인 텍스트 보관)
+            // 재료 수정용 임시 저장소
             const [tempCookingItems, setTempCookingItems] = useState({});
 
             const headerRef = useRef(null);
@@ -459,9 +464,23 @@
                 }
             }, [activeTab]);
 
+            // Scroll Throttling for Performance
             useEffect(() => {
+                let ticking = false;
                 const handleScroll = () => {
-                    if (contentRef.current) setIsScrolled(contentRef.current.scrollTop > 20);
+                    if (!ticking) {
+                        window.requestAnimationFrame(() => {
+                            if (contentRef.current) {
+                                const isThreshold = contentRef.current.scrollTop > 20;
+                                setIsScrolled(prev => {
+                                    if (prev !== isThreshold) return isThreshold;
+                                    return prev;
+                                });
+                            }
+                            ticking = false;
+                        });
+                        ticking = true;
+                    }
                 };
                 const contentElement = contentRef.current;
                 if (contentElement) contentElement.addEventListener('scroll', handleScroll);
@@ -538,7 +557,7 @@
                     <div className="flex flex-col w-full">
                         <p className={`font-bold mb-1 tracking-tighter text-[#000000] uppercase transition-all duration-300 ${isScrolled ? 'text-[10px]' : 'text-sm'}`}>Europe Trip 2025</p>
                         <div className="flex justify-between items-end w-full">
-                            <h1 className={`font-black text-[#000000] tracking-tighter leading-[0.85] transition-all duration-300 mb-2 ${isScrolled ? 'text-2xl' : 'text-6xl md:text-7xl'}`}>DOY &<br/>DONGHUI</h1>
+                            <h1 className={`header-text font-black text-[#000000] tracking-tighter leading-[0.85] mb-2 ${isScrolled ? 'text-2xl' : 'text-6xl md:text-7xl'}`}>DOY &<br/>DONGHUI</h1>
                             <div className="text-right flex flex-col items-end gap-1 mb-1 shrink-0">
                                 <button onClick={handleEditClick} className={`border-2 border-[#000000] px-4 py-1 text-xs font-bold uppercase transition-all ${isEditMode ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>
                                     {isEditMode ? 'DONE' : 'EDIT'}
@@ -627,7 +646,6 @@
                         <div className="p-6 border-b-2 border-[#000000] flex flex-col gap-4 bg-[#FEF0E4]">
                             <div className="flex justify-between items-center">
                                 <div className="flex gap-2">
-                                    {/* [수정] 4. 지도 탭 버튼 순서 변경: Google Map이 왼쪽, Route가 오른쪽 */}
                                     <button onClick={() => setMapViewMode('real')} className={`px-4 py-2 text-xs font-black border-2 border-[#000000] uppercase transition-all tracking-tighter ${mapViewMode === 'real' ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>Google Map</button>
                                     <button onClick={() => setMapViewMode('schematic')} className={`px-4 py-2 text-xs font-black border-2 border-[#000000] uppercase transition-all tracking-tighter ${mapViewMode === 'schematic' ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>Route</button>
                                 </div>
@@ -645,7 +663,24 @@
                                 </div>
                             )}
                         </div>
-                        {/* [수정] 4. Google Map이 기본값(real)이므로 먼저 보여줌 (하지만 코드상 렌더링 순서는 상관없고 state로 제어됨) */}
+                        {mapViewMode === 'schematic' && (
+                        <div className="p-8 bg-[#FEF0E4]">
+                            <div className="mb-8 border-b-4 border-[#000000] pb-4">
+                                <h2 className="text-5xl sm:text-6xl font-black text-[#000000] mb-2 uppercase tracking-tighter leading-none">{data.schedule[selectedDay-1].city}</h2>
+                                <p className="text-lg font-bold text-[#000000]">{data.schedule[selectedDay-1].date}</p>
+                            </div>
+                            <div className="relative pl-6 space-y-0 border-l-4 border-[#000000] ml-2">
+                                {data.schedule[selectedDay-1].events.map((event, idx) => (
+                                    <div key={idx} className="relative pl-8 pb-12 last:pb-0 group">
+                                        <div className="absolute -left-[10px] top-2 w-4 h-4 bg-[#FEF0E4] border-4 border-[#000000]"></div>
+                                        <span className="font-mono text-xs font-bold text-[#000000] block mb-1 opacity-100">{event.time}</span>
+                                        <span className="text-xl sm:text-2xl font-black text-[#000000] block uppercase tracking-tighter leading-none">{event.desc.split('(')[0]}</span>
+                                        {isEditMode && <button onClick={(e) => deleteEvent(selectedDay-1, event.id, e)} className="text-red-500 absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity"><ThinTrash /></button>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        )}
                         {mapViewMode === 'real' && (
                         <div className="flex flex-col">
                             <div className="h-[400px] bg-gray-200 relative border-b-2 border-[#000000]">
@@ -663,24 +698,6 @@
                                     </div>
                                 ))}
                                 </div>
-                            </div>
-                        </div>
-                        )}
-                        {mapViewMode === 'schematic' && (
-                        <div className="p-8 bg-[#FEF0E4]">
-                            <div className="mb-8 border-b-4 border-[#000000] pb-4">
-                                <h2 className="text-5xl sm:text-6xl font-black text-[#000000] mb-2 uppercase tracking-tighter leading-none">{data.schedule[selectedDay-1].city}</h2>
-                                <p className="text-lg font-bold text-[#000000]">{data.schedule[selectedDay-1].date}</p>
-                            </div>
-                            <div className="relative pl-6 space-y-0 border-l-4 border-[#000000] ml-2">
-                                {data.schedule[selectedDay-1].events.map((event, idx) => (
-                                    <div key={idx} className="relative pl-8 pb-12 last:pb-0 group">
-                                        <div className="absolute -left-[10px] top-2 w-4 h-4 bg-[#FEF0E4] border-4 border-[#000000]"></div>
-                                        <span className="font-mono text-xs font-bold text-[#000000] block mb-1 opacity-100">{event.time}</span>
-                                        <span className="text-xl sm:text-2xl font-black text-[#000000] block uppercase tracking-tighter leading-none">{event.desc.split('(')[0]}</span>
-                                        {isEditMode && <button onClick={(e) => deleteEvent(selectedDay-1, event.id, e)} className="text-red-500 absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity"><ThinTrash /></button>}
-                                    </div>
-                                ))}
                             </div>
                         </div>
                         )}
@@ -703,7 +720,6 @@
                                         </div>
                                         <div className="flex flex-col">
                                             {dataGroup.items.map((item, i) => (
-                                                // [수정] 3. 클릭 시 구글 검색 창 열기 (edit mode 아닐 때만)
                                                 <div key={item.id} onClick={() => openGoogleSearch(item.name, dataGroup.city)} className="px-6 py-5 border-b-2 border-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4] transition-colors group cursor-pointer relative">
                                                     <div className="flex justify-between items-baseline mb-1">
                                                         {isEditMode ? (
@@ -736,11 +752,9 @@
                         )}
                         {recommendSubTab === 'cooking' && (
                         <div className="flex flex-col bg-[#FEF0E4]">
-                            {/* [수정] 1. 흰 공백 제거 (mt-4 삭제), 내부 간격 조정 (pt-6) */}
-                            <div className="border-b-2 border-[#000000] p-6 pt-6 relative bg-[#E0C3FC] z-0">
-                                {/* [수정] 1. 아이콘 위치 조정 및 z-index 추가 */}
-                                <div className="absolute -top-3 left-6 bg-[#E0C3FC] px-2 border-2 border-[#000000] z-10"><MinimalChefHat /></div>
-                                <h3 className="font-black text-xl uppercase mb-1 mt-2 tracking-tighter">Parisian Dining</h3>
+                            <div className="border-b-2 border-[#000000] p-6 pt-10 relative bg-[#E0C3FC] z-0">
+                                <div className="absolute top-3 left-6 px-2 border-2 border-[#000000] bg-[#E0C3FC] z-10"><MinimalChefHat /></div>
+                                <h3 className="font-black text-xl uppercase mb-1 tracking-tighter">Parisian Dining</h3>
                                 <p className="text-sm font-bold leading-tight opacity-100">파리 현지 마트(Monoprix, Franprix)나 시장에서 신선한 재료를 사서 에어비앤비에서 요리해 보세요.</p>
                             </div>
                             {data.recommendations.cooking.map((menu, idx) => (
@@ -757,7 +771,6 @@
                                 )}
                                 <div className="flex flex-wrap gap-2">
                                     {isEditMode ? (
-                                        // [수정] 2. 재료 수정 자유롭게 (onBlur시 저장)
                                         <input
                                             value={tempCookingItems[menu.id] !== undefined ? tempCookingItems[menu.id] : menu.items.join(', ')}
                                             onChange={(e) => setTempCookingItems({...tempCookingItems, [menu.id]: e.target.value})}
