@@ -3,8 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <!-- 모바일에서 입력 시 자동 확대 방지 (maximum-scale=1) 및 뷰포트 설정 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Doy & Donghui Europe Trip</title>
+    
+    <!-- 아이폰 홈 화면 아이콘 설정 -->
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="icon" href="icon.png">
+    
+    <!-- 아이폰 홈 화면 추가 시 앱처럼 보이기 (주소창 제거) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Europe Trip">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM & Babel -->
@@ -23,10 +33,13 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #FEF0E4; /* 배경색 강제 적용 */
             overflow-x: hidden; /* 가로 스크롤 방지 */
+            /* 아이폰 노치 영역 대응 */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
         }
     </style>
 </head>
-<body class="bg-[#FEF0E4]"> <!-- Tailwind 클래스로도 배경색 지정 -->
+<body class="bg-[#FEF0E4]">
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
@@ -98,7 +111,6 @@
         // React Components
         const { useState, useEffect, useRef } = React;
         
-        // 아이콘 등 컴포넌트 정의
         const MinimalIcon = ({ type }) => {
             const strokeWidth = 2; 
             const SvgWrapper = ({ children }) => (
@@ -141,7 +153,6 @@
         const PlusIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
         const CheckSquareIcon = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
 
-        // 초기 데이터
         const initialSchedule = [
             { day: 1, date: "12.13 (토)", city: "Paris", title: "파리 도착", events: [{ id: 101, time: "18:30", iconType: "Plane", type: "이동", desc: "파리 샤를드골 공항 도착" }, { id: 102, time: "20:00", iconType: "Home", type: "숙소", desc: "Castex Hotel 체크인 (마레지구)" }, { id: 103, time: "20:30", iconType: "Utensils", type: "식사", desc: "Le Temps des Cerises (저녁)" }] },
             { day: 2, date: "12.14 (일)", city: "Paris", title: "빈티지와 일요일", events: [{ id: 201, time: "10:00", iconType: "ShoppingBag", type: "쇼핑", desc: "방브 벼룩시장" }, { id: 202, time: "12:30", iconType: "Utensils", type: "식사", desc: "La Crêperie de Josselin (점심)" }, { id: 203, time: "13:00", iconType: "Coffee", type: "휴식", desc: "뤽상부르 공원 산책" }, { id: 204, time: "14:00", iconType: "ShoppingBag", type: "쇼핑", desc: "르 봉 마르셰 백화점" }, { id: 205, time: "16:00", iconType: "Camera", type: "관광", desc: "마르스 광장 (에펠탑)" }, { id: 206, time: "18:00", iconType: "Home", type: "숙소", desc: "에어비앤비(Rue des Tournelles) 체크인" }] },
@@ -433,6 +444,13 @@
                 updateData({ ...data, recommendations: newRecs });
             };
 
+            // 1. [NEW] 탭 변경 시 스크롤 초기화 (Top으로 이동)
+            useEffect(() => {
+                if (contentRef.current) {
+                    contentRef.current.scrollTop = 0;
+                }
+            }, [activeTab]);
+
             useEffect(() => {
                 const handleScroll = () => {
                     if (contentRef.current) setIsScrolled(contentRef.current.scrollTop > 20);
@@ -512,7 +530,7 @@
                     <div className="flex flex-col w-full">
                         <p className={`font-bold mb-1 tracking-tighter text-[#000000] uppercase transition-all duration-300 ${isScrolled ? 'text-[10px]' : 'text-sm'}`}>Europe Trip 2025</p>
                         <div className="flex justify-between items-end w-full">
-                            <h1 className={`font-black text-[#000000] tracking-tighter leading-[0.85] transition-all duration-300 ${isScrolled ? 'text-2xl mb-2' : 'text-6xl'}`}>DOY &<br/>DONGHUI</h1>
+                            <h1 className={`font-black text-[#000000] tracking-tighter leading-[0.85] transition-all duration-300 mb-2 ${isScrolled ? 'text-2xl' : 'text-6xl md:text-7xl'}`}>DOY &<br/>DONGHUI</h1>
                             <div className="text-right flex flex-col items-end gap-1 mb-1 shrink-0">
                                 <button onClick={handleEditClick} className={`border-2 border-[#000000] px-4 py-1 text-xs font-bold uppercase transition-all ${isEditMode ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>
                                     {isEditMode ? 'DONE' : 'EDIT'}
@@ -661,7 +679,8 @@
 
                     {activeTab === 'curation' && (
                     <div className="flex flex-col">
-                        <div className="flex border-b-2 border-[#000000]">
+                        {/* [NEW] 2. Curation 서브 탭 상단 고정 (Sticky) */}
+                        <div className="flex border-b-2 border-[#000000] sticky top-0 z-10 bg-[#FEF0E4]">
                         {[{ id: 'places', label: 'PLACES' }, { id: 'shopping', label: 'SHOPPING' }, { id: 'cooking', label: 'COOKING' }].map(sub => (
                             <button key={sub.id} onClick={() => setRecommendSubTab(sub.id)} className={`flex-1 py-3 text-xs font-black tracking-tight transition-all border-r-2 border-[#000000] last:border-r-0 ${recommendSubTab === sub.id ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-[#FEF0E4] text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>{sub.label}</button>
                         ))}
