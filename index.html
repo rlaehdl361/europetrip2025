@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 모바일에서 입력 시 자동 확대 방지 (maximum-scale=1) 및 뷰포트 설정 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Doy & Donghui Europe Trip</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,48 +16,201 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     
     <style>
-        /* Custom Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background-color: #000000;
-            border-radius: 2px;
-        }
-        body {
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #000000; border-radius: 2px; }
+        body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #FEF0E4; /* 배경색 강제 적용 */
+            overflow-x: hidden; /* 가로 스크롤 방지 */
         }
     </style>
 </head>
-<body style="background-color: #FEF0E4;">
+<body class="bg-[#FEF0E4]"> <!-- Tailwind 클래스로도 배경색 지정 -->
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, setDoc, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // ==========================================================================================
+        // [중요] 깃허브 페이지 배포 시 본인의 Firebase 키를 입력하세요.
+        const USER_FIREBASE_CONFIG = {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+        // ==========================================================================================
+
+        let db = null;
+        let dataDocRef = null;
+        let isFirebaseActive = false;
+
+        async function initDB() {
+            let config;
+            
+            if (typeof __firebase_config !== 'undefined') {
+                config = JSON.parse(__firebase_config);
+                isFirebaseActive = true;
+            } else if (USER_FIREBASE_CONFIG.apiKey) {
+                config = USER_FIREBASE_CONFIG;
+                isFirebaseActive = true;
+            } else {
+                console.warn("Firebase 설정이 없습니다. 로컬 저장소를 사용합니다.");
+                isFirebaseActive = false;
+                return null;
+            }
+
+            try {
+                const app = initializeApp(config);
+                const auth = getAuth(app);
+                
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                db = getFirestore(app);
+                
+                if (typeof __firebase_config !== 'undefined') {
+                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default';
+                     const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trip_data');
+                     dataDocRef = doc(colRef, 'shared'); 
+                } else {
+                     dataDocRef = doc(db, 'trips', 'shared_europe_trip');
+                }
+                
+                return dataDocRef;
+            } catch (e) {
+                console.error("Firebase Init Error:", e);
+                isFirebaseActive = false;
+                return null;
+            }
+        }
+
+        // React Components
         const { useState, useEffect, useRef } = React;
         
-        // Lucide 아이콘들을 전역 객체에서 가져옵니다.
-        // React 컴포넌트 형태로 래핑하여 사용합니다.
-        const IconWrapper = ({ name, size = 24, strokeWidth = 2, className, ...props }) => {
-            const lucide = window.lucide;
-            if (!lucide) return null;
-            
-            // Lucide 아이콘을 SVG 문자열로 생성하고 React 요소로 변환
-            const iconElement = lucide.icons[name];
-            if (!iconElement) return null;
-
-            // React 컴포넌트처럼 사용하기 위해 createElement 사용 (간단한 버전)
-            // 여기서는 단순화를 위해 Lucide의 createIcons가 아닌 직접 SVG 렌더링 방식을 흉내냅니다.
-            // 하지만 React 환경에서는 lucide-react 라이브러리 없이 CDN만으로는 컴포넌트화가 까다로울 수 있어,
-            // 아래와 같이 SVG를 직접 그리는 방식으로 미니멀 아이콘을 구현한 App 코드를 그대로 사용합니다.
-            // *중요*: 아래 App 코드의 MinimalIcon 컴포넌트가 이미 SVG를 직접 그리고 있으므로 
-            // 별도의 Lucide 라이브러리 로딩에 크게 의존하지 않도록 구성되어 있습니다.
-            return null; 
+        // 아이콘 등 컴포넌트 정의
+        const MinimalIcon = ({ type }) => {
+            const strokeWidth = 2; 
+            const SvgWrapper = ({ children }) => (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 shrink-0">
+                    <circle cx="12" cy="12" r="9" />
+                    {children}
+                </svg>
+            );
+            const iconMap = {
+                Plane: <path d="M7 17L17 7M7 7h10v10" />, 
+                Train: <path d="M7 17L17 7M7 7h10v10" />,
+                Home: <rect x="8" y="8" width="8" height="8" rx="0.5" />,
+                Utensils: <path d="M12 7v10M7 12h10" />,
+                ShoppingBag: <circle cx="12" cy="12" r="3.5" />,
+                Coffee: <path d="M8 10v2a4 4 0 0 0 4 4 4 4 0 0 0 4-4v-2" />,
+                Camera: <g><rect x="7" y="9" width="10" height="7" rx="1" /><path d="M10 9V7h4v2" /></g>,
+                Info: <g><rect x="7" y="9" width="10" height="7" rx="1" /><path d="M10 9V7h4v2" /></g>,
+                MapPin: <circle cx="12" cy="12" r="3" />,
+            };
+            return <SvgWrapper>{iconMap[type] || iconMap.MapPin}</SvgWrapper>;
         };
 
-        // --- App Component Starts Here ---
+        const ThinTrash = ({ size = 16 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+        );
+
+        const MinimalChefHat = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" />
+                <line x1="6" y1="17" x2="18" y2="17" />
+            </svg>
+        );
+
+        const LockIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+        const XIcon = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const MapPinIcon = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
+        const AlertTriangleIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+        const PlusIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+        const CheckSquareIcon = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
+
+        // 초기 데이터 (생략 없이 그대로 사용)
+        const initialSchedule = [
+            { day: 1, date: "12.13 (토)", city: "Paris", title: "파리 도착", events: [{ id: 101, time: "18:30", iconType: "Plane", type: "이동", desc: "파리 샤를드골 공항 도착" }, { id: 102, time: "20:00", iconType: "Home", type: "숙소", desc: "Castex Hotel 체크인 (마레지구)" }, { id: 103, time: "20:30", iconType: "Utensils", type: "식사", desc: "Le Temps des Cerises (저녁)" }] },
+            { day: 2, date: "12.14 (일)", city: "Paris", title: "빈티지와 일요일", events: [{ id: 201, time: "10:00", iconType: "ShoppingBag", type: "쇼핑", desc: "방브 벼룩시장" }, { id: 202, time: "12:30", iconType: "Utensils", type: "식사", desc: "La Crêperie de Josselin (점심)" }, { id: 203, time: "13:00", iconType: "Coffee", type: "휴식", desc: "뤽상부르 공원 산책" }, { id: 204, time: "14:00", iconType: "ShoppingBag", type: "쇼핑", desc: "르 봉 마르셰 백화점" }, { id: 205, time: "16:00", iconType: "Camera", type: "관광", desc: "마르스 광장 (에펠탑)" }, { id: 206, time: "18:00", iconType: "Home", type: "숙소", desc: "에어비앤비(Rue des Tournelles) 체크인" }] },
+            { day: 3, date: "12.15 (월)", city: "Paris", title: "예술과 건축", events: [{ id: 301, time: "10:00", iconType: "ShoppingBag", type: "쇼핑", desc: "생투앙 벼룩시장" }, { id: 302, time: "13:00", iconType: "Utensils", type: "식사", desc: "Ma Cocotte (점심)" }, { id: 303, time: "15:00", iconType: "Camera", type: "관광", desc: "오랑주리 미술관" }, { id: 304, time: "17:00", iconType: "Camera", type: "관광", desc: "피노 컬렉션 (Bourse de Commerce)" }] },
+            { day: 4, date: "12.16 (화)", city: "Paris", title: "마레지구 산책", events: [{ id: 401, time: "10:30", iconType: "Coffee", type: "카페", desc: "Boot Café" }, { id: 402, time: "12:15", iconType: "Utensils", type: "식사", desc: "Septime (예약됨)" }, { id: 403, time: "14:30", iconType: "Info", type: "관광", desc: "카르나발레 박물관" }, { id: 404, time: "16:00", iconType: "ShoppingBag", type: "쇼핑", desc: "메르시(Merci) 편집샵" }] },
+            { day: 5, date: "12.17 (수)", city: "Paris", title: "클래식 파리", events: [{ id: 501, time: "09:00", iconType: "Camera", type: "관광", desc: "오르세 미술관" }, { id: 502, time: "13:00", iconType: "Utensils", type: "식사", desc: "Les Deux Magots (카페)" }, { id: 503, time: "14:30", iconType: "ShoppingBag", type: "쇼핑", desc: "Astier de Villatte (그릇)" }, { id: 504, time: "16:30", iconType: "Coffee", type: "간식", desc: "Poilâne (사과 타르트)" }, { id: 505, time: "18:00", iconType: "Camera", type: "관광", desc: "퐁뇌프 / 센느강 산책" }] },
+            { day: 6, date: "12.18 (목)", city: "Paris", title: "건축 투어", events: [{ id: 601, time: "10:30", iconType: "Camera", type: "관광", desc: "빌라 라 로슈 (르 코르뷔지에)" }, { id: 602, time: "13:00", iconType: "Utensils", type: "식사", desc: "Café Kitsuné (팔레 루아얄)" }, { id: 603, time: "15:00", iconType: "Info", type: "관광", desc: "갤러리 비비엔 (아케이드)" }] },
+            { day: 7, date: "12.19 (금)", city: "Prague", title: "프라하 이동", events: [{ id: 701, time: "16:50", iconType: "Plane", type: "이동", desc: "파리 출발 (CDG)" }, { id: 702, time: "18:30", iconType: "Plane", type: "이동", desc: "프라하 도착 (PRG)" }, { id: 703, time: "20:00", iconType: "Home", type: "숙소", desc: "알폰스 부티크 호텔 체크인" }, { id: 704, time: "21:00", iconType: "Camera", type: "관광", desc: "구시가지 광장 크리스마스 마켓" }] },
+            { day: 8, date: "12.20 (토)", city: "Prague", title: "보헤미안 감성", events: [{ id: 801, time: "10:00", iconType: "Info", type: "투어", desc: "화약탑 (팁투어 만남)" }, { id: 802, time: "13:00", iconType: "Utensils", type: "식사", desc: "Naše Maso (정육점 식당)" }, { id: 803, time: "15:00", iconType: "Coffee", type: "카페", desc: "Grand Cafe Orient (큐비즘)" }, { id: 804, time: "17:00", iconType: "Camera", type: "관광", desc: "까렐교 산책" }, { id: 805, time: "19:30", iconType: "Utensils", type: "식사", desc: "Lokál Dlouhááá (맥주)" }] },
+            { day: 9, date: "12.21 (일)", city: "Dresden", title: "크리스마스 마켓", events: [{ id: 901, time: "12:30", iconType: "Train", type: "이동", desc: "프라하 중앙역 출발" }, { id: 902, time: "14:30", iconType: "Train", type: "이동", desc: "드레스덴 중앙역 도착" }, { id: 903, time: "15:00", iconType: "Home", type: "숙소", desc: "Star G Hotel Premium" }, { id: 904, time: "16:00", iconType: "Info", type: "관광", desc: "츠빙거 궁전" }, { id: 905, time: "17:30", iconType: "Camera", type: "관광", desc: "슈트리첼마르크트 (마켓)" }] },
+            { day: 10, date: "12.22 (월)", city: "Berlin", title: "베를린 힙스터", events: [{ id: 1001, time: "12:25", iconType: "Train", type: "이동", desc: "드레스덴 출발" }, { id: 1002, time: "14:45", iconType: "Home", type: "숙소", desc: "Casa Camper Berlin" }, { id: 1003, time: "16:00", iconType: "Coffee", type: "카페", desc: "보난자 커피 히어로즈" }, { id: 1004, time: "18:00", iconType: "ShoppingBag", type: "쇼핑", desc: "미테(Mitte) 지구 편집샵" }, { id: 1005, time: "19:30", iconType: "Utensils", type: "식사", desc: "Monsieur Vuong (쌀국수)" }] },
+            { day: 11, date: "12.23 (화)", city: "Berlin", title: "현대 미술", events: [{ id: 1101, time: "10:30", iconType: "Camera", type: "관광", desc: "신 국립 미술관 (미스 반 데어 로에)" }, { id: 1102, time: "13:30", iconType: "Utensils", type: "식사", desc: "커리부어스트" }, { id: 1103, time: "15:00", iconType: "ShoppingBag", type: "쇼핑", desc: "Voo Store / Do You Read Me?!" }, { id: 1104, time: "17:30", iconType: "Camera", type: "체험", desc: "포토오토마트 (흑백사진)" }, { id: 1105, time: "19:00", iconType: "ShoppingBag", type: "쇼핑", desc: "REWE 마트 장보기 (이브 대비)" }] },
+            { day: 12, date: "12.24 (수)", city: "Berlin", title: "고요한 이브", events: [{ id: 1201, time: "10:00", iconType: "Camera", type: "관광", desc: "독일 국회의사당 돔" }, { id: 1202, time: "13:00", iconType: "Camera", type: "관광", desc: "브란덴부르크 문" }, { id: 1203, time: "15:00", iconType: "Home", type: "휴식", desc: "호텔 휴식 & 파티" }] },
+            { day: 13, date: "12.25 (목)", city: "Berlin", title: "메리 베를린", events: [{ id: 1301, time: "13:00", iconType: "Camera", type: "관광", desc: "박물관 섬" }, { id: 1302, time: "16:00", iconType: "Utensils", type: "식사", desc: "젠다르멘 마켓" }, { id: 1303, time: "19:00", iconType: "Utensils", type: "식사", desc: "Paris Moskau (디너)" }] },
+            { day: 14, date: "12.26 (금)", city: "Frankfurt", title: "마지막 여정", events: [{ id: 1401, time: "11:57", iconType: "Train", type: "이동", desc: "베를린 중앙역 출발" }, { id: 1402, time: "16:00", iconType: "Plane", type: "이동", desc: "프랑크푸르트 공항 이동" }] },
+            { day: 15, date: "12.27 (토)", city: "Seoul", title: "귀국", events: [{ id: 1501, time: "14:00", iconType: "Home", type: "도착", desc: "인천공항 도착 🏠" }] },
+        ];
+
+        const initialRecommendations = {
+            places: [
+                { id: 'p1', city: "PARIS", items: [{ id: 'p1-1', name: "Ofr. Paris", desc: "마레지구 예술 서점, 에코백 필수" }, { id: 'p1-2', name: "Boot Café", desc: "구두 수선집을 개조한 아주 작은 카페" }, { id: 'p1-3', name: "Maison La Roche", desc: "르 코르뷔지에 건축의 정수" }, { id: 'p1-4', name: "Bourse de Commerce", desc: "안도 타다오의 콘크리트 미학" }] },
+                { id: 'p2', city: "PRAGUE", items: [{ id: 'p2-1', name: "Grand Cafe Orient", desc: "세계 유일 큐비즘(입체파) 카페" }, { id: 'p2-2', name: "Jazz Dock", desc: "강 위에서 즐기는 현대적인 재즈 공연" }] },
+                { id: 'p3', city: "DRESDEN", items: [{ id: 'p3-1', name: "Kunsthofpassage", desc: "비가 오면 노래하는 배수관이 있는 예술 지구" }, { id: 'p3-2', name: "Pfunds Molkerei", desc: "세계에서 가장 아름다운 유제품 가게" }] },
+                { id: 'p4', city: "BERLIN", items: [{ id: 'p4-1', name: "Voo Store", desc: "크로이츠베르크의 힙한 컨셉 스토어" }, { id: 'p4-2', name: "Do You Read Me?!", desc: "그래픽 디자인, 패션 잡지 전문 서점" }, { id: 'p4-3', name: "Neue Nationalgalerie", desc: "미스 반 데어 로에의 모더니즘 걸작" }] }
+            ],
+            shopping: [
+                { id: 's1', city: "PARIS", items: [{ id: 's1-1', name: "Astier de Villatte", desc: "그릇 (기내 반입 필수!) - 엄마 선물" }, { id: 's1-2', name: "E.Dehillerin", desc: "요리 덕후들의 성지, 전문 주방용품" }, { id: 's1-3', name: "Merci", desc: "팔찌 및 감각적인 인테리어 소품" }, { id: 's1-4', name: "CityPharma", desc: "몽쥬보다 저렴한 약국 화장품 (립밤)" }, { id: 's1-5', name: "Sabre Paris", desc: "비스트로 스타일 커트러리 세트" }] },
+                { id: 's2', city: "PRAGUE", items: [{ id: 's2-1', name: "Manufaktura", desc: "맥주 샴푸, 와인 바디워시 (선물용)" }, { id: 's2-2', name: "Blue Praha", desc: "체코 전통 쪽빛 유리 공예품" }, { id: 's2-3', name: "Pragtique", desc: "감각적인 디자인 엽서, 에코백" }, { id: 's2-4', name: "Wooden Toys", desc: "하벨 시장의 귀여운 목각 인형" }] },
+                { id: 's3', city: "BERLIN", items: [{ id: 's3-1', name: "Bauhaus Archive Shop", desc: "바우하우스 포스터 및 디자인 문구" }, { id: 's3-2', name: "Voo Store", desc: "Acne Studios 등 힙한 브랜드 의류" }, { id: 's3-3', name: "Ampelmann", desc: "귀여운 베를린 신호등 캐릭터 굿즈" }, { id: 's3-4', name: "Do You Read Me?!", desc: "인테리어용으로 좋은 아트 매거진" }, { id: 's3-5', name: "DM", desc: "아요나 치약, 발포비타민 (가성비 최고)" }] },
+                { id: 's4', city: "DRESDEN", items: [{ id: 's4-1', name: "Meissen", desc: "세계적인 명품 마이센 도자기" }, { id: 's4-2', name: "Camondas", desc: "드레스덴의 유명 초콜릿 & 코코아" }, { id: 's4-3', name: "Käthe Wohlfahrt", desc: "크리스마스 오너먼트 (1년 내내 오픈)" }] }
+            ],
+            cooking: [
+                { id: 'c1', title: "1. 소고기 스테이크", desc: "정육점에서 안심(Filet)이나 등심을 두껍게 썰어달라고 하세요.", items: ["소고기", "버터(Echire)", "트러플 소금", "아스파라거스"] },
+                { id: 'c2', title: "2. 납작복숭아 & 부라타 샐러드", desc: "간단하지만 가장 유럽스러운 맛.", items: ["납작복숭아(또는 메론)", "부라타 치즈", "루꼴라", "올리브오일", "후추"] },
+                { id: 'c3', title: "3. 트러플 파스타", desc: "마트에서 생면 파스타와 트러플 소스를 사면 끝.", items: ["생면 파스타", "트러플 페스토", "파마산 치즈", "양송이 버섯"] },
+                { id: 'c4', title: "4. 잠봉 뵈르 샌드위치", desc: "아침 식사로 최고.", items: ["바게트 트라디시옹", "가염 버터", "잠봉(얇은 햄)"] },
+                { id: 'c5', title: "5. 와인 안주 치즈 플래터", desc: "저녁에 넷플릭스 보면서.", items: ["콩테(Comte) 치즈", "브리 치즈", "청포도", "크래커"] },
+                { id: 'c6', title: "6. 홍합탕 (Moules Marinières)", desc: "화이트 와인만 있으면 뚝딱.", items: ["손질된 홍합", "화이트 와인", "마늘", "양파", "버터"] },
+                { id: 'c7', title: "7. 훈제 연어 & 아보카도", desc: "건강한 아침.", items: ["훈제 연어", "아보카도", "레몬", "호밀빵"] },
+                { id: 'c8', title: "8. 요거트 볼", desc: "유럽 요거트는 정말 진해요.", items: ["그릭 요거트", "본마망 잼", "그래놀라", "베리류"] },
+                { id: 'c9', title: "9. 소시지 구이 & 감자", desc: "독일 마트 털기.", items: ["부어스트(소시지)", "감자(삶거나 굽기)", "사우어크라우트(병조림)"] },
+                { id: 'c10', title: "10. 납작복숭아 & 요거트", desc: "디저트로 최고.", items: ["납작복숭아", "꿀", "요거트"] }
+            ]
+        };
+
+        const initialChecklist = [
+            { id: 'c1', text: "여행자 보험 가입 확인", checked: false },
+            { id: 'c2', text: "읽을 책, 노트북 챙기기", checked: false },
+            { id: 'c3', text: "다이소 샤워볼 구매", checked: false },
+            { id: 'c4', text: "냉장고 정리 (유통기한 임박 음식)", checked: false },
+            { id: 'c5', text: "면세점 쇼핑 리스트 최종 확인", checked: false },
+            { id: 'c6', text: "머리 염색 / 네일 받기", checked: false },
+            { id: 'c7', text: "체코행 비행기 온라인 체크인 (필수!)", checked: false, important: true },
+            { id: 'c8', text: "수화물 규정 및 캐리어 크기 확인", checked: false },
+            { id: 'c9', text: "알폰스 부티크 호텔 투숙객 정보 입력", checked: false },
+            { id: 'c10', text: "에어비앤비 체크인 가이드 확인", checked: false },
+            { id: 'c11', text: "고양이(랑이) 탁묘 맡기기", checked: true },
+            { id: 'c12', text: "경량패딩 준비", checked: true },
+            { id: 'c13', text: "붙이는 핫팩 넉넉히 챙기기", checked: true },
+            { id: 'c14', text: "치안 용품 (자물쇠, 옷핀) 챙기기", checked: true },
+            { id: 'c15', text: "휴대폰 삼각대 및 촬영 용품", checked: true },
+            { id: 'c16', text: "여행 옷 쇼핑 (Shein 배송 확인)", checked: true },
+            { id: 'c17', text: "주요 박물관/미술관 예약 확인", checked: true },
+            { id: 'c18', text: "전기장판 챙기기 (유럽 난방 약함)", checked: true }
+        ];
+
+        const initialNotices = [
+            { id: 'n1', text: "체코행 비행기 온라인 체크인 필수 (공항 유료)" },
+            { id: 'n2', text: "독일 12/24~26 상점 휴무 (미리 장보기)" },
+            { id: 'n3', text: "베를린 교통권은 AB존 일일권 추천" }
+        ];
 
         const App = () => {
             const [activeTab, setActiveTab] = useState('itinerary');
@@ -67,375 +221,108 @@
             const [isEditMode, setIsEditMode] = useState(false);
             const [isScrolled, setIsScrolled] = useState(false);
             
-            // Password Modal State
             const [showPasswordModal, setShowPasswordModal] = useState(false);
             const [passwordInput, setPasswordInput] = useState("");
             const [passwordError, setPasswordError] = useState(false);
 
-            // Refs for scrolling behavior
             const headerRef = useRef(null);
             const contentRef = useRef(null);
 
-            // --- Input States ---
             const [newEvent, setNewEvent] = useState({ time: "", type: "관광", desc: "" });
             const [newRec, setNewRec] = useState({ name: "", desc: "" });
             const [newCooking, setNewCooking] = useState({ title: "", desc: "", ingredients: "" });
             const [newItemText, setNewItemText] = useState("");
             const [newNoticeText, setNewNoticeText] = useState("");
             
-            // Edit States for inline editing
             const [editingChecklistId, setEditingChecklistId] = useState(null);
             const [tempChecklistText, setTempChecklistText] = useState("");
             const [editingNoticeId, setEditingNoticeId] = useState(null);
             const [tempNoticeText, setTempNoticeText] = useState("");
 
-            // --- Data Initialization ---
-            const [schedule, setSchedule] = useState(() => {
-                const saved = localStorage.getItem('tripSchedule');
-                return saved ? JSON.parse(saved) : [
-                {
-                day: 1, date: "12.13 (토)", city: "Paris", title: "파리 도착",
-                events: [
-                    { id: 101, time: "18:30", iconType: "Plane", type: "이동", desc: "파리 샤를드골 공항 도착" },
-                    { id: 102, time: "20:00", iconType: "Home", type: "숙소", desc: "Castex Hotel 체크인 (마레지구)" },
-                    { id: 103, time: "20:30", iconType: "Utensils", type: "식사", desc: "Le Temps des Cerises (저녁)" }
-                ]
-                },
-                {
-                day: 2, date: "12.14 (일)", city: "Paris", title: "빈티지와 일요일",
-                events: [
-                    { id: 201, time: "10:00", iconType: "ShoppingBag", type: "쇼핑", desc: "방브 벼룩시장" },
-                    { id: 202, time: "12:30", iconType: "Utensils", type: "식사", desc: "La Crêperie de Josselin (점심)" },
-                    { id: 203, time: "13:00", iconType: "Coffee", type: "휴식", desc: "뤽상부르 공원 산책" },
-                    { id: 204, time: "14:00", iconType: "ShoppingBag", type: "쇼핑", desc: "르 봉 마르셰 백화점" },
-                    { id: 205, time: "16:00", iconType: "Camera", type: "관광", desc: "마르스 광장 (에펠탑)" },
-                    { id: 206, time: "18:00", iconType: "Home", type: "숙소", desc: "에어비앤비(Rue des Tournelles) 체크인" }
-                ]
-                },
-                {
-                day: 3, date: "12.15 (월)", city: "Paris", title: "예술과 건축",
-                events: [
-                    { id: 301, time: "10:00", iconType: "ShoppingBag", type: "쇼핑", desc: "생투앙 벼룩시장" },
-                    { id: 302, time: "13:00", iconType: "Utensils", type: "식사", desc: "Ma Cocotte (점심)" },
-                    { id: 303, time: "15:00", iconType: "Camera", type: "관광", desc: "오랑주리 미술관" },
-                    { id: 304, time: "17:00", iconType: "Camera", type: "관광", desc: "피노 컬렉션 (Bourse de Commerce)" }
-                ]
-                },
-                {
-                day: 4, date: "12.16 (화)", city: "Paris", title: "마레지구 산책",
-                events: [
-                    { id: 401, time: "10:30", iconType: "Coffee", type: "카페", desc: "Boot Café" },
-                    { id: 402, time: "12:15", iconType: "Utensils", type: "식사", desc: "Septime (예약됨)" },
-                    { id: 403, time: "14:30", iconType: "Info", type: "관광", desc: "카르나발레 박물관" },
-                    { id: 404, time: "16:00", iconType: "ShoppingBag", type: "쇼핑", desc: "메르시(Merci) 편집샵" }
-                ]
-                },
-                {
-                day: 5, date: "12.17 (수)", city: "Paris", title: "클래식 파리",
-                events: [
-                    { id: 501, time: "09:00", iconType: "Camera", type: "관광", desc: "오르세 미술관" },
-                    { id: 502, time: "13:00", iconType: "Utensils", type: "식사", desc: "Les Deux Magots (카페)" },
-                    { id: 503, time: "14:30", iconType: "ShoppingBag", type: "쇼핑", desc: "Astier de Villatte (그릇)" },
-                    { id: 504, time: "16:30", iconType: "Coffee", type: "간식", desc: "Poilâne (사과 타르트)" },
-                    { id: 505, time: "18:00", iconType: "Camera", type: "관광", desc: "퐁뇌프 / 센느강 산책" }
-                ]
-                },
-                {
-                day: 6, date: "12.18 (목)", city: "Paris", title: "건축 투어",
-                events: [
-                    { id: 601, time: "10:30", iconType: "Camera", type: "관광", desc: "빌라 라 로슈 (르 코르뷔지에)" },
-                    { id: 602, time: "13:00", iconType: "Utensils", type: "식사", desc: "Café Kitsuné (팔레 루아얄)" },
-                    { id: 603, time: "15:00", iconType: "Info", type: "관광", desc: "갤러리 비비엔 (아케이드)" }
-                ]
-                },
-                {
-                day: 7, date: "12.19 (금)", city: "Prague", title: "프라하 이동",
-                events: [
-                    { id: 701, time: "16:50", iconType: "Plane", type: "이동", desc: "파리 출발 (CDG)" },
-                    { id: 702, time: "18:30", iconType: "Plane", type: "이동", desc: "프라하 도착 (PRG)" },
-                    { id: 703, time: "20:00", iconType: "Home", type: "숙소", desc: "알폰스 부티크 호텔 체크인" },
-                    { id: 704, time: "21:00", iconType: "Camera", type: "관광", desc: "구시가지 광장 크리스마스 마켓" }
-                ]
-                },
-                {
-                day: 8, date: "12.20 (토)", city: "Prague", title: "보헤미안 감성",
-                events: [
-                    { id: 801, time: "10:00", iconType: "Info", type: "투어", desc: "화약탑 (팁투어 만남)" },
-                    { id: 802, time: "13:00", iconType: "Utensils", type: "식사", desc: "Naše Maso (정육점 식당)" },
-                    { id: 803, time: "15:00", iconType: "Coffee", type: "카페", desc: "Grand Cafe Orient (큐비즘)" },
-                    { id: 804, time: "17:00", iconType: "Camera", type: "관광", desc: "까렐교 산책" },
-                    { id: 805, time: "19:30", iconType: "Utensils", type: "식사", desc: "Lokál Dlouhááá (맥주)" }
-                ]
-                },
-                {
-                day: 9, date: "12.21 (일)", city: "Dresden", title: "크리스마스 마켓",
-                events: [
-                    { id: 901, time: "12:30", iconType: "Train", type: "이동", desc: "프라하 중앙역 출발" },
-                    { id: 902, time: "14:30", iconType: "Train", type: "이동", desc: "드레스덴 중앙역 도착" },
-                    { id: 903, time: "15:00", iconType: "Home", type: "숙소", desc: "Star G Hotel Premium" },
-                    { id: 904, time: "16:00", iconType: "Info", type: "관광", desc: "츠빙거 궁전" },
-                    { id: 905, time: "17:30", iconType: "Camera", type: "관광", desc: "슈트리첼마르크트 (마켓)" }
-                ]
-                },
-                {
-                day: 10, date: "12.22 (월)", city: "Berlin", title: "베를린 힙스터",
-                events: [
-                    { id: 1001, time: "12:25", iconType: "Train", type: "이동", desc: "드레스덴 출발" },
-                    { id: 1002, time: "14:45", iconType: "Home", type: "숙소", desc: "Casa Camper Berlin" },
-                    { id: 1003, time: "16:00", iconType: "Coffee", type: "카페", desc: "보난자 커피 히어로즈" },
-                    { id: 1004, time: "18:00", iconType: "ShoppingBag", type: "쇼핑", desc: "미테(Mitte) 지구 편집샵" },
-                    { id: 1005, time: "19:30", iconType: "Utensils", type: "식사", desc: "Monsieur Vuong (쌀국수)" }
-                ]
-                },
-                {
-                day: 11, date: "12.23 (화)", city: "Berlin", title: "현대 미술",
-                events: [
-                    { id: 1101, time: "10:30", iconType: "Camera", type: "관광", desc: "신 국립 미술관 (미스 반 데어 로에)" },
-                    { id: 1102, time: "13:30", iconType: "Utensils", type: "식사", desc: "커리부어스트" },
-                    { id: 1103, time: "15:00", iconType: "ShoppingBag", type: "쇼핑", desc: "Voo Store / Do You Read Me?!" },
-                    { id: 1104, time: "17:30", iconType: "Camera", type: "체험", desc: "포토오토마트 (흑백사진)" },
-                    { id: 1105, time: "19:00", iconType: "ShoppingBag", type: "쇼핑", desc: "REWE 마트 장보기 (이브 대비)" }
-                ]
-                },
-                {
-                day: 12, date: "12.24 (수)", city: "Berlin", title: "고요한 이브",
-                events: [
-                    { id: 1201, time: "10:00", iconType: "Camera", type: "관광", desc: "독일 국회의사당 돔" },
-                    { id: 1202, time: "13:00", iconType: "Camera", type: "관광", desc: "브란덴부르크 문" },
-                    { id: 1203, time: "15:00", iconType: "Home", type: "휴식", desc: "호텔 휴식 & 파티" }
-                ]
-                },
-                {
-                day: 13, date: "12.25 (목)", city: "Berlin", title: "메리 베를린",
-                events: [
-                    { id: 1301, time: "13:00", iconType: "Camera", type: "관광", desc: "박물관 섬" },
-                    { id: 1302, time: "16:00", iconType: "Utensils", type: "식사", desc: "젠다르멘 마켓" },
-                    { id: 1303, time: "19:00", iconType: "Utensils", type: "식사", desc: "Paris Moskau (디너)" }
-                ]
-                },
-                {
-                day: 14, date: "12.26 (금)", city: "Frankfurt", title: "마지막 여정",
-                events: [
-                    { id: 1401, time: "11:57", iconType: "Train", type: "이동", desc: "베를린 중앙역 출발" },
-                    { id: 1402, time: "16:00", iconType: "Plane", type: "이동", desc: "프랑크푸르트 공항 이동" }
-                ]
-                },
-                {
-                day: 15, date: "12.27 (토)", city: "Seoul", title: "귀국",
-                events: [
-                    { id: 1501, time: "14:00", iconType: "Home", type: "도착", desc: "인천공항 도착 🏠" }
-                ]
-                },
-            ]});
-
-            const [recommendations, setRecommendations] = useState(() => {
-                const saved = localStorage.getItem('tripRecommendations');
-                return saved ? JSON.parse(saved) : {
-                places: [
-                { id: 'p1', city: "PARIS", items: [
-                    { id: 'p1-1', name: "Ofr. Paris", desc: "마레지구 예술 서점, 에코백 필수" },
-                    { id: 'p1-2', name: "Boot Café", desc: "구두 수선집을 개조한 아주 작은 카페" },
-                    { id: 'p1-3', name: "Maison La Roche", desc: "르 코르뷔지에 건축의 정수" },
-                    { id: 'p1-4', name: "Bourse de Commerce", desc: "안도 타다오의 콘크리트 미학" }
-                ]},
-                { id: 'p2', city: "PRAGUE", items: [
-                    { id: 'p2-1', name: "Grand Cafe Orient", desc: "세계 유일 큐비즘(입체파) 카페" },
-                    { id: 'p2-2', name: "Jazz Dock", desc: "강 위에서 즐기는 현대적인 재즈 공연" }
-                ]},
-                { id: 'p3', city: "DRESDEN", items: [
-                    { id: 'p3-1', name: "Kunsthofpassage", desc: "비가 오면 노래하는 배수관이 있는 예술 지구" },
-                    { id: 'p3-2', name: "Pfunds Molkerei", desc: "세계에서 가장 아름다운 유제품 가게" }
-                ]},
-                { id: 'p4', city: "BERLIN", items: [
-                    { id: 'p4-1', name: "Voo Store", desc: "크로이츠베르크의 힙한 컨셉 스토어" },
-                    { id: 'p4-2', name: "Do You Read Me?!", desc: "그래픽 디자인, 패션 잡지 전문 서점" },
-                    { id: 'p4-3', name: "Neue Nationalgalerie", desc: "미스 반 데어 로에의 모더니즘 걸작" }
-                ]}
-                ],
-                shopping: [
-                { id: 's1', city: "PARIS", items: [
-                    { id: 's1-1', name: "Astier de Villatte", desc: "그릇 (기내 반입 필수!) - 엄마 선물" },
-                    { id: 's1-2', name: "E.Dehillerin", desc: "요리 덕후들의 성지, 전문 주방용품" },
-                    { id: 's1-3', name: "Merci", desc: "팔찌 및 감각적인 인테리어 소품" },
-                    { id: 's1-4', name: "CityPharma", desc: "몽쥬보다 저렴한 약국 화장품 (립밤)" },
-                    { id: 's1-5', name: "Sabre Paris", desc: "비스트로 스타일 커트러리 세트" }
-                ]},
-                { id: 's2', city: "PRAGUE", items: [
-                    { id: 's2-1', name: "Manufaktura", desc: "맥주 샴푸, 와인 바디워시 (선물용)" },
-                    { id: 's2-2', name: "Blue Praha", desc: "체코 전통 쪽빛 유리 공예품" },
-                    { id: 's2-3', name: "Pragtique", desc: "감각적인 디자인 엽서, 에코백" },
-                    { id: 's2-4', name: "Wooden Toys", desc: "하벨 시장의 귀여운 목각 인형" }
-                ]},
-                { id: 's3', city: "BERLIN", items: [
-                    { id: 's3-1', name: "Bauhaus Archive Shop", desc: "바우하우스 포스터 및 디자인 문구" },
-                    { id: 's3-2', name: "Voo Store", desc: "Acne Studios 등 힙한 브랜드 의류" },
-                    { id: 's3-3', name: "Ampelmann", desc: "귀여운 베를린 신호등 캐릭터 굿즈" },
-                    { id: 's3-4', name: "Do You Read Me?!", desc: "인테리어용으로 좋은 아트 매거진" },
-                    { id: 's3-5', name: "DM", desc: "아요나 치약, 발포비타민 (가성비 최고)" }
-                ]},
-                { id: 's4', city: "DRESDEN", items: [
-                    { id: 's4-1', name: "Meissen", desc: "세계적인 명품 마이센 도자기" },
-                    { id: 's4-2', name: "Camondas", desc: "드레스덴의 유명 초콜릿 & 코코아" },
-                    { id: 's4-3', name: "Käthe Wohlfahrt", desc: "크리스마스 오너먼트 (1년 내내 오픈)" }
-                ]}
-                ],
-                cooking: [
-                { id: 'c1', title: "1. 소고기 스테이크", desc: "정육점에서 안심(Filet)이나 등심을 두껍게 썰어달라고 하세요.", items: [
-                    "소고기", "버터(Echire)", "트러플 소금", "아스파라거스"
-                ]},
-                { id: 'c2', title: "2. 납작복숭아 & 부라타 샐러드", desc: "간단하지만 가장 유럽스러운 맛.", items: [
-                    "납작복숭아(또는 메론)", "부라타 치즈", "루꼴라", "올리브오일", "후추"
-                ]},
-                { id: 'c3', title: "3. 트러플 파스타", desc: "마트에서 생면 파스타와 트러플 소스를 사면 끝.", items: [
-                    "생면 파스타", "트러플 페스토", "파마산 치즈", "양송이 버섯"
-                ]},
-                { id: 'c4', title: "4. 잠봉 뵈르 샌드위치", desc: "아침 식사로 최고.", items: [
-                    "바게트 트라디시옹", "가염 버터", "잠봉(얇은 햄)"
-                ]},
-                { id: 'c5', title: "5. 와인 안주 치즈 플래터", desc: "저녁에 넷플릭스 보면서.", items: [
-                    "콩테(Comte) 치즈", "브리 치즈", "청포도", "크래커"
-                ]},
-                { id: 'c6', title: "6. 홍합탕 (Moules Marinières)", desc: "화이트 와인만 있으면 뚝딱.", items: [
-                    "손질된 홍합", "화이트 와인", "마늘", "양파", "버터"
-                ]},
-                { id: 'c7', title: "7. 훈제 연어 & 아보카도", desc: "건강한 아침.", items: [
-                    "훈제 연어", "아보카도", "레몬", "호밀빵"
-                ]},
-                { id: 'c8', title: "8. 요거트 볼", desc: "유럽 요거트는 정말 진해요.", items: [
-                    "그릭 요거트", "본마망 잼", "그래놀라", "베리류"
-                ]},
-                { id: 'c9', title: "9. 소시지 구이 & 감자", desc: "독일 마트 털기.", items: [
-                    "부어스트(소시지)", "감자(삶거나 굽기)", "사우어크라우트(병조림)"
-                ]},
-                { id: 'c10', title: "10. 납작복숭아 & 요거트", desc: "디저트로 최고.", items: [
-                    "납작복숭아", "꿀", "요거트"
-                ]}
-                ]
-            }});
-
-            const [checklistItems, setChecklistItems] = useState(() => {
-                const saved = localStorage.getItem('tripChecklist');
-                if (saved) {
-                return JSON.parse(saved);
-                } else {
-                return [
-                    { id: 'c1', text: "여행자 보험 가입 확인", checked: false },
-                    { id: 'c2', text: "읽을 책, 노트북 챙기기", checked: false },
-                    { id: 'c3', text: "다이소 샤워볼 구매", checked: false },
-                    { id: 'c4', text: "냉장고 정리 (유통기한 임박 음식)", checked: false },
-                    { id: 'c5', text: "면세점 쇼핑 리스트 최종 확인", checked: false },
-                    { id: 'c6', text: "머리 염색 / 네일 받기", checked: false },
-                    { id: 'c7', text: "체코행 비행기 온라인 체크인 (필수!)", checked: false, important: true },
-                    { id: 'c8', text: "수화물 규정 및 캐리어 크기 확인", checked: false },
-                    { id: 'c9', text: "알폰스 부티크 호텔 투숙객 정보 입력", checked: false },
-                    { id: 'c10', text: "에어비앤비 체크인 가이드 확인", checked: false },
-                    { id: 'c11', text: "고양이(랑이) 탁묘 맡기기", checked: true },
-                    { id: 'c12', text: "경량패딩 준비", checked: true },
-                    { id: 'c13', text: "붙이는 핫팩 넉넉히 챙기기", checked: true },
-                    { id: 'c14', text: "치안 용품 (자물쇠, 옷핀) 챙기기", checked: true },
-                    { id: 'c15', text: "휴대폰 삼각대 및 촬영 용품", checked: true },
-                    { id: 'c16', text: "여행 옷 쇼핑 (Shein 배송 확인)", checked: true },
-                    { id: 'c17', text: "주요 박물관/미술관 예약 확인", checked: true },
-                    { id: 'c18', text: "전기장판 챙기기 (유럽 난방 약함)", checked: true }
-                ];
-                }
+            const [data, setData] = useState({
+                schedule: initialSchedule,
+                recommendations: initialRecommendations,
+                checklistItems: initialChecklist,
+                notices: initialNotices
             });
 
-            const [notices, setNotices] = useState(() => {
-                const saved = localStorage.getItem('tripNotices');
-                return saved ? JSON.parse(saved) : [
-                    { id: 'n1', text: "체코행 비행기 온라인 체크인 필수 (공항 유료)" },
-                    { id: 'n2', text: "독일 12/24~26 상점 휴무 (미리 장보기)" },
-                    { id: 'n3', text: "베를린 교통권은 AB존 일일권 추천" }
-                ];
-            });
-
-            // --- Effects for Persistence & Scroll ---
             useEffect(() => {
-                localStorage.setItem('tripSchedule', JSON.stringify(schedule));
-            }, [schedule]);
-
-            useEffect(() => {
-                localStorage.setItem('tripRecommendations', JSON.stringify(recommendations));
-            }, [recommendations]);
-
-            useEffect(() => {
-                localStorage.setItem('tripChecklist', JSON.stringify(checklistItems));
-            }, [checklistItems]);
-
-            useEffect(() => {
-                localStorage.setItem('tripNotices', JSON.stringify(notices));
-            }, [notices]);
-
-            useEffect(() => {
-                const handleScroll = () => {
-                if (contentRef.current) {
-                    setIsScrolled(contentRef.current.scrollTop > 20);
-                }
+                let unsubscribe;
+                const startSync = async () => {
+                    const docRef = await initDB();
+                    if (isFirebaseActive && docRef) {
+                        unsubscribe = onSnapshot(docRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                setData(docSnap.data());
+                            } else {
+                                setDoc(docRef, data);
+                            }
+                        }, (error) => {
+                            console.error("Sync Error:", error);
+                        });
+                    } else {
+                        const savedData = localStorage.getItem('tripData');
+                        if (savedData) {
+                            setData(JSON.parse(savedData));
+                        }
+                    }
                 };
-
-                const contentElement = contentRef.current;
-                if (contentElement) {
-                contentElement.addEventListener('scroll', handleScroll);
-                }
-
-                return () => {
-                if (contentElement) {
-                    contentElement.removeEventListener('scroll', handleScroll);
-                }
-                };
+                startSync();
+                return () => { if (unsubscribe) unsubscribe(); };
             }, []);
 
+            const updateData = (newData) => {
+                setData(newData);
+                if (isFirebaseActive && dataDocRef) {
+                    setDoc(dataDocRef, newData, { merge: true });
+                } else {
+                    localStorage.setItem('tripData', JSON.stringify(newData));
+                }
+            };
 
-            // --- Handlers ---
             const toggleCheck = (id) => {
                 if (isEditMode) return;
-                setChecklistItems(prev => prev.map(item => 
-                item.id === id ? { ...item, checked: !item.checked } : item
-                ));
+                const newItems = data.checklistItems.map(item => item.id === id ? { ...item, checked: !item.checked } : item);
+                updateData({ ...data, checklistItems: newItems });
             };
 
             const addChecklistItem = () => {
                 if (!newItemText.trim()) return;
-                const newItem = {
-                id: Date.now().toString(),
-                text: newItemText,
-                checked: false
-                };
-                setChecklistItems(prev => [newItem, ...prev]);
+                const newItem = { id: Date.now().toString(), text: newItemText, checked: false };
+                updateData({ ...data, checklistItems: [newItem, ...data.checklistItems] });
                 setNewItemText("");
             };
 
             const deleteChecklistItem = (e, id) => {
                 e.stopPropagation();
-                setChecklistItems(prev => prev.filter(item => item.id !== id));
+                const newItems = data.checklistItems.filter(item => item.id !== id);
+                updateData({ ...data, checklistItems: newItems });
             };
 
             const startEditingChecklist = (id, text) => {
                 if (isEditMode) {
-                setEditingChecklistId(id);
-                setTempChecklistText(text);
+                    setEditingChecklistId(id);
+                    setTempChecklistText(text);
                 }
             };
 
             const saveEditingChecklist = (id) => {
-                setChecklistItems(prev => prev.map(item => 
-                item.id === id ? { ...item, text: tempChecklistText } : item
-                ));
+                const newItems = data.checklistItems.map(item => item.id === id ? { ...item, text: tempChecklistText } : item);
+                updateData({ ...data, checklistItems: newItems });
                 setEditingChecklistId(null);
                 setTempChecklistText("");
             };
 
-
-            // Notices
             const addNotice = () => {
                 if (!newNoticeText.trim()) return;
-                setNotices(prev => [...prev, { id: Date.now().toString(), text: newNoticeText }]);
+                const newItems = [...data.notices, { id: Date.now().toString(), text: newNoticeText }];
+                updateData({ ...data, notices: newItems });
                 setNewNoticeText("");
             };
 
             const deleteNotice = (id) => {
-                setNotices(prev => prev.filter(n => n.id !== id));
+                const newItems = data.notices.filter(n => n.id !== id);
+                updateData({ ...data, notices: newItems });
             };
 
             const startEditingNotice = (id, text) => {
@@ -446,280 +333,159 @@
             };
 
             const saveEditingNotice = (id) => {
-                setNotices(prev => prev.map(n => n.id === id ? { ...n, text: tempNoticeText } : n));
+                const newItems = data.notices.map(n => n.id === id ? { ...n, text: tempNoticeText } : n);
+                updateData({ ...data, notices: newItems });
                 setEditingNoticeId(null);
                 setTempNoticeText("");
             };
 
-            // Itinerary
             const addEvent = (dayIndex) => {
-                if (!newEvent.time || !newEvent.desc) {
-                alert("시간과 내용을 입력해주세요.");
-                return;
-                }
-                setSchedule(prev => {
-                    // Correct immutable update
-                    const newSchedule = [...prev];
-                    const dayEvents = [...newSchedule[dayIndex].events];
-                    const eventToAdd = {
-                        id: Date.now(),
-                        time: newEvent.time,
-                        type: newEvent.type,
-                        desc: newEvent.desc,
-                        iconType: "MapPin"
-                    };
-                    dayEvents.push(eventToAdd);
-                    dayEvents.sort((a, b) => a.time.localeCompare(b.time));
-                    newSchedule[dayIndex] = { ...newSchedule[dayIndex], events: dayEvents };
-                    return newSchedule;
-                });
+                if (!newEvent.time || !newEvent.desc) { alert("시간과 내용을 입력해주세요."); return; }
+                const newSchedule = [...data.schedule];
+                const dayEvents = [...newSchedule[dayIndex].events];
+                dayEvents.push({ id: Date.now(), time: newEvent.time, type: newEvent.type, desc: newEvent.desc, iconType: "MapPin" });
+                dayEvents.sort((a, b) => a.time.localeCompare(b.time));
+                newSchedule[dayIndex] = { ...newSchedule[dayIndex], events: dayEvents };
+                updateData({ ...data, schedule: newSchedule });
                 setNewEvent({ time: "", type: "관광", desc: "" });
             };
 
             const updateEvent = (dayIndex, eventId, field, value) => {
-                setSchedule(prev => {
-                    const newSchedule = [...prev];
-                    const dayEvents = [...newSchedule[dayIndex].events];
-                    const eventIdx = dayEvents.findIndex(e => e.id === eventId);
-                    if (eventIdx > -1) {
-                        dayEvents[eventIdx] = { ...dayEvents[eventIdx], [field]: value };
-                        if (field === 'time') {
-                            dayEvents.sort((a, b) => a.time.localeCompare(b.time));
-                        }
-                        newSchedule[dayIndex] = { ...newSchedule[dayIndex], events: dayEvents };
-                    }
-                    return newSchedule;
-                });
+                const newSchedule = [...data.schedule];
+                const dayEvents = [...newSchedule[dayIndex].events];
+                const eventIdx = dayEvents.findIndex(e => e.id === eventId);
+                if (eventIdx > -1) {
+                    dayEvents[eventIdx] = { ...dayEvents[eventIdx], [field]: value };
+                    if (field === 'time') dayEvents.sort((a, b) => a.time.localeCompare(b.time));
+                    newSchedule[dayIndex] = { ...newSchedule[dayIndex], events: dayEvents };
+                    updateData({ ...data, schedule: newSchedule });
+                }
             };
 
             const deleteEvent = (dayIndex, eventId, e) => {
-                // Prevent parent click (edit mode toggle etc)
                 if (e) e.stopPropagation();
-                
-                // Removed window.confirm as requested
-                setSchedule(prev => prev.map((day, idx) => 
-                    idx === dayIndex 
-                    ? { ...day, events: day.events.filter(e => e.id !== eventId) }
-                    : day
-                ));
+                const newSchedule = data.schedule.map((day, idx) => 
+                    idx === dayIndex ? { ...day, events: day.events.filter(e => e.id !== eventId) } : day
+                );
+                updateData({ ...data, schedule: newSchedule });
             };
 
-            // Recommendations
             const addRecommendation = (subTab, cityId) => {
                 if (!newRec.name) return;
-                setRecommendations(prev => {
-                    const newRecs = { ...prev };
-                    // Copy subTab array
-                    const subTabArray = [...newRecs[subTab]];
-                    const cityIndex = subTabArray.findIndex(c => c.id === cityId);
-                    
-                    if (cityIndex > -1) {
-                        const newItems = [...subTabArray[cityIndex].items];
-                        newItems.push({
-                            id: Date.now().toString(),
-                            name: newRec.name,
-                            desc: newRec.desc
-                        });
-                        // Update city object with new items
-                        subTabArray[cityIndex] = { ...subTabArray[cityIndex], items: newItems };
-                        newRecs[subTab] = subTabArray;
-                    }
-                    return newRecs;
-                });
+                const newRecs = { ...data.recommendations };
+                const subTabArray = [...newRecs[subTab]];
+                const cityIndex = subTabArray.findIndex(c => c.id === cityId);
+                if (cityIndex > -1) {
+                    const newItems = [...subTabArray[cityIndex].items, { id: Date.now().toString(), name: newRec.name, desc: newRec.desc }];
+                    subTabArray[cityIndex] = { ...subTabArray[cityIndex], items: newItems };
+                    newRecs[subTab] = subTabArray;
+                    updateData({ ...data, recommendations: newRecs });
+                }
                 setNewRec({ name: "", desc: "" });
             };
 
             const updateRecommendation = (subTab, cityId, itemId, field, value) => {
-                setRecommendations(prev => {
-                    const newRecs = { ...prev };
-                    const subTabArray = [...newRecs[subTab]];
-                    const cityIndex = subTabArray.findIndex(c => c.id === cityId);
-                    
-                    if (cityIndex > -1) {
-                        const newItems = subTabArray[cityIndex].items.map(item => 
-                            item.id === itemId ? { ...item, [field]: value } : item
-                        );
-                        subTabArray[cityIndex] = { ...subTabArray[cityIndex], items: newItems };
-                        newRecs[subTab] = subTabArray;
-                    }
-                    return newRecs;
-                });
+                const newRecs = { ...data.recommendations };
+                const subTabArray = [...newRecs[subTab]];
+                const cityIndex = subTabArray.findIndex(c => c.id === cityId);
+                if (cityIndex > -1) {
+                    const newItems = subTabArray[cityIndex].items.map(item => item.id === itemId ? { ...item, [field]: value } : item);
+                    subTabArray[cityIndex] = { ...subTabArray[cityIndex], items: newItems };
+                    newRecs[subTab] = subTabArray;
+                    updateData({ ...data, recommendations: newRecs });
+                }
             };
 
             const deleteRecommendation = (subTab, cityId, itemId, e) => {
                 if (e) e.stopPropagation();
-                // Removed window.confirm
-                setRecommendations(prev => {
-                    const newRecs = { ...prev };
-                    const subTabArray = [...newRecs[subTab]];
-                    const cityIndex = subTabArray.findIndex(c => c.id === cityId);
-                    
-                    if (cityIndex > -1) {
-                        const newItems = subTabArray[cityIndex].items.filter(i => i.id !== itemId);
-                        subTabArray[cityIndex] = { ...subTabArray[cityIndex], items: newItems };
-                        newRecs[subTab] = subTabArray;
-                    }
-                    return newRecs;
-                });
+                const newRecs = { ...data.recommendations };
+                const subTabArray = [...newRecs[subTab]];
+                const cityIndex = subTabArray.findIndex(c => c.id === cityId);
+                if (cityIndex > -1) {
+                    const newItems = subTabArray[cityIndex].items.filter(i => i.id !== itemId);
+                    subTabArray[cityIndex] = { ...subTabArray[cityIndex], items: newItems };
+                    newRecs[subTab] = subTabArray;
+                    updateData({ ...data, recommendations: newRecs });
+                }
             };
 
             const addCookingMenu = () => {
                 if (!newCooking.title) return;
-                setRecommendations(prev => ({
-                    ...prev,
-                    cooking: [...prev.cooking, {
-                        id: Date.now().toString(),
-                        title: newCooking.title,
-                        desc: newCooking.desc,
-                        items: newCooking.ingredients.split(',').map(s => s.trim()).filter(Boolean)
-                    }]
-                }));
+                const newRecs = { ...data.recommendations };
+                const newMenu = { id: Date.now().toString(), title: newCooking.title, desc: newCooking.desc, items: newCooking.ingredients.split(',').map(s => s.trim()).filter(Boolean) };
+                newRecs.cooking = [...newRecs.cooking, newMenu];
+                updateData({ ...data, recommendations: newRecs });
                 setNewCooking({ title: "", desc: "", ingredients: "" });
             };
 
             const updateCookingMenu = (menuId, field, value) => {
-                setRecommendations(prev => ({
-                    ...prev,
-                    cooking: prev.cooking.map(menu => {
-                        if (menu.id === menuId) {
-                            return { ...menu, [field]: value };
-                        }
-                        return menu;
-                    })
-                }));
+                const newRecs = { ...data.recommendations };
+                newRecs.cooking = newRecs.cooking.map(m => m.id === menuId ? { ...m, [field]: value } : m);
+                updateData({ ...data, recommendations: newRecs });
             };
 
             const deleteCookingMenu = (menuId, e) => {
                 if (e) e.stopPropagation();
-                // Removed window.confirm
-                setRecommendations(prev => ({
-                    ...prev,
-                    cooking: prev.cooking.filter(m => m.id !== menuId)
-                }));
+                const newRecs = { ...data.recommendations };
+                newRecs.cooking = newRecs.cooking.filter(m => m.id !== menuId);
+                updateData({ ...data, recommendations: newRecs });
             };
 
-            // Password Handling
+            useEffect(() => {
+                const handleScroll = () => {
+                    if (contentRef.current) setIsScrolled(contentRef.current.scrollTop > 20);
+                };
+                const contentElement = contentRef.current;
+                if (contentElement) contentElement.addEventListener('scroll', handleScroll);
+                return () => { if (contentElement) contentElement.removeEventListener('scroll', handleScroll); };
+            }, []);
+
             const handleEditClick = () => {
-                if (isEditMode) {
-                setIsEditMode(false);
-                } else {
-                setShowPasswordModal(true);
-                }
+                if (isEditMode) setIsEditMode(false);
+                else setShowPasswordModal(true);
             };
 
             const handlePasswordSubmit = () => {
                 if (passwordInput === '12250723') {
-                setIsEditMode(true);
-                setShowPasswordModal(false);
-                setPasswordInput("");
-                setPasswordError(false);
-                } else {
-                setPasswordError(true);
-                }
+                    setIsEditMode(true);
+                    setShowPasswordModal(false);
+                    setPasswordInput("");
+                    setPasswordError(false);
+                } else setPasswordError(true);
             };
-
-            const sortedChecklistItems = [...checklistItems].sort((a, b) => {
-                if (a.checked === b.checked) return 0;
-                return a.checked ? 1 : -1;
-            });
 
             const getMapUrl = (dayEvents, currentCity) => {
                 const formatLocation = (locDesc) => {
-                const cleanLoc = locDesc.split('(')[0].trim();
-                const majorCities = ["Paris", "Prague", "Praha", "Dresden", "Berlin", "Frankfurt", "Seoul", "Incheon", "Munich"];
-                const hasCity = majorCities.some(city => cleanLoc.toUpperCase().includes(city.toUpperCase()));
-                return hasCity ? cleanLoc : `${cleanLoc}, ${currentCity}`;
+                    const cleanLoc = locDesc.split('(')[0].trim();
+                    const majorCities = ["Paris", "Prague", "Praha", "Dresden", "Berlin", "Frankfurt", "Seoul", "Incheon", "Munich"];
+                    const hasCity = majorCities.some(city => cleanLoc.toUpperCase().includes(city.toUpperCase()));
+                    return hasCity ? cleanLoc : `${cleanLoc}, ${currentCity}`;
                 };
-
-                if (selectedLocation) {
-                const query = formatLocation(selectedLocation); 
-                return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
-                }
-
+                if (selectedLocation) return `https://maps.google.com/maps?q=${encodeURIComponent(formatLocation(selectedLocation))}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
                 if (dayEvents && dayEvents.length > 0) {
                     const start = formatLocation(dayEvents[0].desc);
                     const end = formatLocation(dayEvents[dayEvents.length - 1].desc);
                     let daddr = end;
                     if (dayEvents.length > 2) {
                         const waypoints = dayEvents.slice(1, dayEvents.length - 1).map(e => formatLocation(e.desc));
-                        const waypointString = waypoints.join('+to:');
-                        daddr = `${waypointString}+to:${end}`;
+                        daddr = `${waypoints.join('+to:')}+to:${end}`;
                     }
                     return `https://maps.google.com/maps?saddr=${encodeURIComponent(start)}&daddr=${encodeURIComponent(daddr)}&output=embed`;
                 }
                 return "";
             };
 
-            // Custom Minimal Icons (Geometric & Centered)
-            const MinimalIcon = ({ type }) => {
-                const strokeWidth = 2; 
-                
-                // SVG Helpers
-                const SvgWrapper = ({ children }) => (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                        <circle cx="12" cy="12" r="9" />
-                        {children}
-                    </svg>
-                );
-
-                const iconMap = {
-                    // Transport -> Arrow
-                    Plane: <path d="M7 17L17 7M7 7h10v10" />, 
-                    Train: <path d="M7 17L17 7M7 7h10v10" />,
-                    
-                    // Accommodation -> Square (centered)
-                    Home: <rect x="8" y="8" width="8" height="8" rx="0.5" />,
-                    
-                    // Meal -> Plus (centered)
-                    Utensils: <path d="M12 7v10M7 12h10" />,
-                    
-                    // Shopping -> Concentric Circle (centered)
-                    ShoppingBag: <circle cx="12" cy="12" r="3.5" />,
-                    
-                    // Rest -> Cup / U-Shape (centered)
-                    Coffee: <path d="M8 10v2a4 4 0 0 0 4 4 4 4 0 0 0 4-4v-2" />,
-                    
-                    // Sightseeing/Info -> Bag/Camera (centered)
-                    Camera: <g><rect x="7" y="9" width="10" height="7" rx="1" /><path d="M10 9V7h4v2" /></g>,
-                    Info: <g><rect x="7" y="9" width="10" height="7" rx="1" /><path d="M10 9V7h4v2" /></g>,
-                    
-                    MapPin: <circle cx="12" cy="12" r="3" />,
-                };
-
-                return <SvgWrapper>{iconMap[type] || iconMap.MapPin}</SvgWrapper>;
-            };
-
-            // Thin Trash Icon
-            const ThinTrash = ({ size = 16 }) => (
-                // Directly render SVG for Trash2
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                </svg>
-            );
-
-            const MinimalChefHat = () => (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" />
-                    <line x1="6" y1="17" x2="18" y2="17" />
-                </svg>
-            );
-
-            // Manual Icon Components for UI elements
-            const LockIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
-            const XIcon = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-            const MapPinIcon = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
-            const AlertTriangleIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
-            const PlusIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
-            const CheckSquareIcon = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
-
+            const sortedChecklistItems = [...data.checklistItems].sort((a, b) => {
+                if (a.checked === b.checked) return 0;
+                return a.checked ? 1 : -1;
+            });
 
             return (
-                <div className="max-w-md mx-auto h-screen flex flex-col overflow-hidden font-sans border-x border-[#000000] relative" style={{ backgroundColor: '#FEF0E4', color: '#000000' }}>
+                <div className="max-w-md mx-auto h-screen flex flex-col overflow-hidden font-sans border-x border-[#000000] relative bg-[#FEF0E4]" style={{ color: '#000000' }}>
                 
-                {/* --- PASSWORD MODAL --- */}
                 {showPasswordModal && (
                     <div className="absolute inset-0 z-50 bg-[#000000] bg-opacity-50 flex items-center justify-center p-6">
-                    <div className="bg-[#FEF0E4] border-2 border-[#000000] w-full max-w-sm p-6 flex flex-col gap-4 shadow-[4px_4px_0px_0px_#000000]">
+                    <div className="bg-[#FEF0E4] border-2 border-[#000000] w-[90%] max-w-sm p-6 flex flex-col gap-4 shadow-[4px_4px_0px_0px_#000000]">
                         <div className="flex justify-between items-center">
                         <h3 className="font-black text-xl uppercase tracking-tighter flex items-center gap-2">
                             <LockIcon size={20} /> Password
@@ -728,187 +494,97 @@
                             <XIcon size={24} />
                         </button>
                         </div>
-                        
                         <p className="text-xs font-bold leading-tight">편집 모드는 관리자만 접근할 수 있습니다.</p>
-                        
                         <div className="flex flex-col gap-2">
-                            <input 
-                            type="password" 
-                            value={passwordInput}
-                            onChange={(e) => setPasswordInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handlePasswordSubmit()}
-                            placeholder="PASSWORD"
-                            className="w-full p-3 text-sm font-bold border-2 border-[#000000] bg-white focus:outline-none focus:bg-[#E0C3FC] transition-colors"
-                            autoFocus
-                            />
+                            <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handlePasswordSubmit()} placeholder="PASSWORD"
+                            className="w-full p-3 text-base font-bold border-2 border-[#000000] bg-white focus:outline-none focus:bg-[#E0C3FC] transition-colors" autoFocus />
                             {passwordError && <p className="text-red-500 text-xs font-black">비밀번호가 올바르지 않습니다.</p>}
                         </div>
-
-                        <button 
-                        onClick={handlePasswordSubmit} 
-                        className="bg-[#000000] text-[#FEF0E4] w-full py-3 font-black text-sm uppercase tracking-wider hover:bg-[#E0C3FC] hover:text-[#000000] border-2 border-[#000000] transition-colors"
-                        >
-                        Enter
-                        </button>
+                        <button onClick={handlePasswordSubmit} className="bg-[#000000] text-[#FEF0E4] w-full py-3 font-black text-sm uppercase tracking-wider hover:bg-[#E0C3FC] hover:text-[#000000] border-2 border-[#000000] transition-colors">Enter</button>
                     </div>
                     </div>
                 )}
 
-                {/* --- HEADER --- */}
-                <div 
-                    ref={headerRef}
-                    className={`z-20 flex flex-col justify-end bg-[#FEF0E4] shrink-0 border-b-2 border-[#000000] transition-all duration-300 ${isScrolled ? 'py-4' : 'py-8'}`}
-                >
+                <div ref={headerRef} className={`z-20 flex flex-col justify-end bg-[#FEF0E4] shrink-0 border-b-2 border-[#000000] transition-all duration-300 ${isScrolled ? 'py-4' : 'py-8'}`}>
                     <div className="px-6 flex justify-between items-end">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col w-full">
                         <p className={`font-bold mb-1 tracking-tighter text-[#000000] uppercase transition-all duration-300 ${isScrolled ? 'text-[10px]' : 'text-sm'}`}>Europe Trip 2025</p>
-                        <h1 className={`font-black text-[#000000] tracking-tighter leading-[0.85] transition-all duration-300 ${isScrolled ? 'text-3xl' : 'text-7xl'}`}>DOY &<br/>DONGHUI</h1>
-                    </div>
-                    <div className="text-right flex flex-col items-end gap-1 mb-1">
-                        <button onClick={handleEditClick} className={`border-2 border-[#000000] px-4 py-1 text-xs font-bold uppercase transition-all ${isEditMode ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>
-                            {isEditMode ? 'DONE' : 'EDIT'}
-                        </button>
-                        <p className="text-xs font-bold text-[#000000] mt-1 tracking-tighter">12.13 — 12.27</p>
+                        <div className="flex justify-between items-end w-full">
+                            <h1 className={`font-black text-[#000000] tracking-tighter leading-[0.85] transition-all duration-300 ${isScrolled ? 'text-2xl' : 'text-5xl md:text-7xl'}`}>DOY &<br/>DONGHUI</h1>
+                            <div className="text-right flex flex-col items-end gap-1 mb-1 shrink-0">
+                                <button onClick={handleEditClick} className={`border-2 border-[#000000] px-4 py-1 text-xs font-bold uppercase transition-all ${isEditMode ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>
+                                    {isEditMode ? 'DONE' : 'EDIT'}
+                                </button>
+                                <p className="text-xs font-bold text-[#000000] mt-1 tracking-tighter">12.13 — 12.27</p>
+                            </div>
+                        </div>
                     </div>
                     </div>
                 </div>
 
-                {/* --- TAB NAVIGATION --- */}
                 <div className={`flex bg-[#FEF0E4] border-b-2 border-[#000000] shrink-0 sticky top-0 z-10`}>
-                    {[
-                    { id: 'itinerary', label: 'ITINERARY' },
-                    { id: 'map', label: 'MAP' },
-                    { id: 'curation', label: 'CURATION' },
-                    { id: 'checklist', label: 'CHECKLIST' }
-                    ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex-1 py-4 text-sm font-black tracking-tighter uppercase transition-colors flex flex-col items-center justify-center border-r-2 border-[#000000] last:border-r-0 ${
-                        activeTab === tab.id 
-                        ? 'bg-[#E0C3FC] text-[#000000]' 
-                        : 'text-[#000000] hover:bg-[#E0C3FC]'
-                        }`}
-                    >
+                    {[{ id: 'itinerary', label: 'ITINERARY' }, { id: 'map', label: 'MAP' }, { id: 'curation', label: 'CURATION' }, { id: 'checklist', label: 'CHECKLIST' }].map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-4 text-xs sm:text-sm font-black tracking-tighter uppercase transition-colors flex flex-col items-center justify-center border-r-2 border-[#000000] last:border-r-0 ${activeTab === tab.id ? 'bg-[#E0C3FC] text-[#000000]' : 'text-[#000000] hover:bg-[#E0C3FC]'}`}>
                         {tab.label}
                     </button>
                     ))}
                 </div>
 
-                {/* --- CONTENT AREA --- */}
                 <div ref={contentRef} className="flex-1 overflow-y-auto custom-scrollbar pb-60 bg-[#FEF0E4]">
-                    
-                    {/* === TAB: ITINERARY === */}
                     {activeTab === 'itinerary' && (
                     <div className="flex flex-col">
-                        {schedule.map((dayData, dayIndex) => (
+                        {data.schedule.map((dayData, dayIndex) => (
                         <div key={dayIndex} className="flex flex-col border-b-2 border-[#000000]">
-                            {/* Day Header */}
                             <div className="px-6 py-4 flex justify-between items-center border-b-2 border-[#000000] bg-[#E0C3FC] text-[#000000]">
                             <div className="flex flex-col leading-none">
-                                <span className="font-black text-4xl tracking-tighter">DAY {dayData.day}</span>
+                                <span className="font-black text-3xl sm:text-4xl tracking-tighter">DAY {dayData.day}</span>
                                 <span className="text-xs font-bold uppercase mt-1 tracking-tight">{dayData.date}</span>
                             </div>
                             <span className="text-xs font-bold border-2 border-[#000000] px-3 py-1 uppercase tracking-wide bg-[#FEF0E4]">{dayData.city}</span>
                             </div>
-                            
-                            {/* Day Content */}
                             <div className="flex flex-col">
-                            {/* Title of the day */}
                             <div className="px-6 py-4 border-b-2 border-[#000000] bg-[#FEF0E4]">
                                 <h3 className="text-xl font-black tracking-tighter uppercase">{dayData.title}</h3>
                             </div>
-
                             {dayData.events.map((event) => (
                                 <div key={event.id} className="flex group items-stretch border-b-2 border-[#000000] last:border-b-0 min-h-[80px]">
                                 <div className="w-16 flex items-center justify-center border-r-2 border-[#000000] bg-[#FEF0E4] shrink-0">
                                     {isEditMode ? (
-                                        <input 
-                                            type="text" 
-                                            value={event.time} 
-                                            onChange={(e) => updateEvent(dayIndex, event.id, 'time', e.target.value)}
-                                            className="w-full text-center text-xs font-bold bg-transparent focus:outline-none"
-                                        />
+                                        <input type="text" value={event.time} onChange={(e) => updateEvent(dayIndex, event.id, 'time', e.target.value)} className="w-full text-center text-xs font-bold bg-transparent focus:outline-none" />
                                     ) : (
                                         <span className="text-xs font-bold text-[#000000] -rotate-90 whitespace-nowrap tracking-widest">{event.time}</span>
                                     )}
                                 </div>
                                 <div className="flex-1 p-4 flex flex-col justify-center relative bg-[#FEF0E4] hover:bg-[#000000] hover:text-[#FEF0E4] transition-colors">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <div className="text-current">
-                                        <MinimalIcon type={event.iconType} />
-                                        </div>
+                                        <div className="text-current"><MinimalIcon type={event.iconType} /></div>
                                         {isEditMode && (
-                                        <select 
-                                            value={event.type}
-                                            onChange={(e) => updateEvent(dayIndex, event.id, 'type', e.target.value)}
-                                            className="text-[10px] font-bold border-2 border-[#000000] px-1 py-0.5 uppercase bg-[#FEF0E4] text-[#000000] ml-1"
-                                        >
-                                            <option value="관광">관광</option>
-                                            <option value="식사">식사</option>
-                                            <option value="이동">이동</option>
-                                            <option value="쇼핑">쇼핑</option>
-                                            <option value="숙소">숙소</option>
-                                            <option value="카페">카페</option>
+                                        <select value={event.type} onChange={(e) => updateEvent(dayIndex, event.id, 'type', e.target.value)} className="text-[10px] font-bold border-2 border-[#000000] px-1 py-0.5 uppercase bg-[#FEF0E4] text-[#000000] ml-1">
+                                            <option value="관광">관광</option><option value="식사">식사</option><option value="이동">이동</option><option value="쇼핑">쇼핑</option><option value="숙소">숙소</option><option value="카페">카페</option>
                                         </select>
                                         )}
-                                        {!isEditMode && (
-                                        <span className="text-[10px] font-black tracking-wider uppercase opacity-70">{event.type}</span>
-                                        )}
+                                        {!isEditMode && <span className="text-[10px] font-black tracking-wider uppercase opacity-70">{event.type}</span>}
                                     </div>
                                     {isEditMode ? (
-                                        <input 
-                                            type="text" 
-                                            value={event.desc} 
-                                            onChange={(e) => updateEvent(dayIndex, event.id, 'desc', e.target.value)}
-                                            className="w-full text-lg font-bold bg-transparent border-b-2 border-[#000000] focus:outline-none"
-                                        />
+                                        <input type="text" value={event.desc} onChange={(e) => updateEvent(dayIndex, event.id, 'desc', e.target.value)} className="w-full text-base font-bold bg-transparent border-b-2 border-[#000000] focus:outline-none" />
                                     ) : (
-                                        <p className="text-lg font-bold leading-tight tracking-tight">{event.desc}</p>
+                                        <p className="text-base sm:text-lg font-bold leading-tight tracking-tight">{event.desc}</p>
                                     )}
-                                    {isEditMode && (
-                                    <button onClick={(e) => deleteEvent(dayIndex, event.id, e)} className="absolute right-4 top-4 text-red-500 hover:text-red-700">
-                                        <ThinTrash />
-                                    </button>
-                                    )}
+                                    {isEditMode && <button onClick={(e) => deleteEvent(dayIndex, event.id, e)} className="absolute right-4 top-4 text-red-500 hover:text-red-700"><ThinTrash /></button>}
                                 </div>
                                 </div>
                             ))}
-                            
                             {isEditMode && (
                                 <div className="p-4 border-b-2 border-[#000000] bg-[#FEF0E4]">
                                     <div className="flex gap-2 mb-2">
-                                        <input 
-                                            type="text" 
-                                            placeholder="00:00" 
-                                            value={newEvent.time}
-                                            onChange={(e) => setNewEvent({...newEvent, time: e.target.value})}
-                                            className="w-20 p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] placeholder-gray-500"
-                                        />
-                                        <select 
-                                            value={newEvent.type}
-                                            onChange={(e) => setNewEvent({...newEvent, type: e.target.value})}
-                                            className="p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]"
-                                        >
-                                            <option value="관광">관광</option>
-                                            <option value="식사">식사</option>
-                                            <option value="이동">이동</option>
-                                            <option value="쇼핑">쇼핑</option>
-                                            <option value="숙소">숙소</option>
-                                            <option value="카페">카페</option>
+                                        <input type="text" placeholder="00:00" value={newEvent.time} onChange={(e) => setNewEvent({...newEvent, time: e.target.value})} className="w-20 p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] placeholder-gray-500" />
+                                        <select value={newEvent.type} onChange={(e) => setNewEvent({...newEvent, type: e.target.value})} className="p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]">
+                                            <option value="관광">관광</option><option value="식사">식사</option><option value="이동">이동</option><option value="쇼핑">쇼핑</option><option value="숙소">숙소</option><option value="카페">카페</option>
                                         </select>
                                     </div>
                                     <div className="flex gap-2">
-                                        <input 
-                                            type="text" 
-                                            placeholder="일정 내용" 
-                                            value={newEvent.desc}
-                                            onChange={(e) => setNewEvent({...newEvent, desc: e.target.value})}
-                                            className="flex-1 p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] placeholder-gray-500"
-                                        />
-                                        <button onClick={() => addEvent(dayIndex)} className="px-4 py-2 bg-[#000000] text-[#FEF0E4] text-xs font-black uppercase">
-                                            추가
-                                        </button>
+                                        <input type="text" placeholder="일정 내용" value={newEvent.desc} onChange={(e) => setNewEvent({...newEvent, desc: e.target.value})} className="flex-1 p-2 text-base font-bold border-2 border-[#000000] bg-[#FEF0E4] placeholder-gray-500" />
+                                        <button onClick={() => addEvent(dayIndex)} className="px-4 py-2 bg-[#000000] text-[#FEF0E4] text-xs font-black uppercase">추가</button>
                                     </div>
                                 </div>
                             )}
@@ -918,10 +594,8 @@
                     </div>
                     )}
 
-                    {/* ... (MAP, CURATION, CHECKLIST logic remains same but using icons) ... */}
                     {activeTab === 'map' && (
                     <div className="flex flex-col border-b-2 border-[#000000]">
-                        {/* Map Controls */}
                         <div className="p-6 border-b-2 border-[#000000] flex flex-col gap-4 bg-[#FEF0E4]">
                             <div className="flex justify-between items-center">
                                 <div className="flex gap-2">
@@ -929,100 +603,51 @@
                                     <button onClick={() => setMapViewMode('real')} className={`px-4 py-2 text-xs font-black border-2 border-[#000000] uppercase transition-all tracking-tighter ${mapViewMode === 'real' ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>Google Map</button>
                                 </div>
                             </div>
-                            
                             <div className="flex items-center gap-2 overflow-x-auto max-w-full no-scrollbar pb-2">
-                                {schedule.map((day) => (
-                                    <button 
-                                    key={day.day} 
-                                    onClick={() => { setSelectedDay(day.day); setSelectedLocation(null); }} 
-                                    className={`shrink-0 w-8 h-8 flex items-center justify-center text-xs font-black border-2 border-[#000000] transition-all ${selectedDay === day.day ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}
-                                    >
-                                        {day.day}
-                                    </button>
+                                {data.schedule.map((day) => (
+                                    <button key={day.day} onClick={() => { setSelectedDay(day.day); setSelectedLocation(null); }} className={`shrink-0 w-8 h-8 flex items-center justify-center text-xs font-black border-2 border-[#000000] transition-all ${selectedDay === day.day ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-transparent text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>{day.day}</button>
                                 ))}
                             </div>
-
                             {isEditMode && (
                                 <div className="flex gap-2 items-center bg-[#FEF0E4] p-2 border-2 border-[#000000]">
-                                    <input 
-                                        type="text" 
-                                        placeholder="00:00" 
-                                        value={newEvent.time}
-                                        onChange={(e) => setNewEvent({...newEvent, time: e.target.value})}
-                                        className="w-16 p-1 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]"
-                                    />
-                                    <input 
-                                        type="text" 
-                                        placeholder="장소 이름" 
-                                        value={newEvent.desc}
-                                        onChange={(e) => setNewEvent({...newEvent, desc: e.target.value})}
-                                        className="flex-1 p-1 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]"
-                                    />
-                                    <button onClick={() => addEvent(selectedDay - 1)} className="bg-[#000000] text-[#FEF0E4] px-3 py-1 text-xs font-bold">
-                                        추가
-                                    </button>
+                                    <input type="text" placeholder="00:00" value={newEvent.time} onChange={(e) => setNewEvent({...newEvent, time: e.target.value})} className="w-16 p-1 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]" />
+                                    <input type="text" placeholder="장소 이름" value={newEvent.desc} onChange={(e) => setNewEvent({...newEvent, desc: e.target.value})} className="flex-1 p-1 text-base font-bold border-2 border-[#000000] bg-[#FEF0E4]" />
+                                    <button onClick={() => addEvent(selectedDay - 1)} className="bg-[#000000] text-[#FEF0E4] px-3 py-1 text-xs font-bold">추가</button>
                                 </div>
                             )}
                         </div>
-
-                        {/* Schematic View */}
                         {mapViewMode === 'schematic' && (
                         <div className="p-8 bg-[#FEF0E4]">
                             <div className="mb-8 border-b-4 border-[#000000] pb-4">
-                                <h2 className="text-6xl font-black text-[#000000] mb-2 uppercase tracking-tighter leading-none">{schedule[selectedDay-1].city}</h2>
-                                <p className="text-lg font-bold text-[#000000]">{schedule[selectedDay-1].date}</p>
+                                <h2 className="text-5xl sm:text-6xl font-black text-[#000000] mb-2 uppercase tracking-tighter leading-none">{data.schedule[selectedDay-1].city}</h2>
+                                <p className="text-lg font-bold text-[#000000]">{data.schedule[selectedDay-1].date}</p>
                             </div>
                             <div className="relative pl-6 space-y-0 border-l-4 border-[#000000] ml-2">
-                                {schedule[selectedDay-1].events.map((event, idx) => (
+                                {data.schedule[selectedDay-1].events.map((event, idx) => (
                                     <div key={idx} className="relative pl-8 pb-12 last:pb-0 group">
                                         <div className="absolute -left-[10px] top-2 w-4 h-4 bg-[#FEF0E4] border-4 border-[#000000]"></div>
                                         <span className="font-mono text-xs font-bold text-[#000000] block mb-1 opacity-100">{event.time}</span>
-                                        <span className="text-2xl font-black text-[#000000] block uppercase tracking-tighter leading-none">{event.desc.split('(')[0]}</span>
-                                        {isEditMode && (
-                                            <button onClick={(e) => deleteEvent(selectedDay-1, event.id, e)} className="text-red-500 absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <ThinTrash />
-                                            </button>
-                                        )}
+                                        <span className="text-xl sm:text-2xl font-black text-[#000000] block uppercase tracking-tighter leading-none">{event.desc.split('(')[0]}</span>
+                                        {isEditMode && <button onClick={(e) => deleteEvent(selectedDay-1, event.id, e)} className="text-red-500 absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity"><ThinTrash /></button>}
                                     </div>
                                 ))}
                             </div>
                         </div>
                         )}
-
-                        {/* Real Map View */}
                         {mapViewMode === 'real' && (
                         <div className="flex flex-col">
                             <div className="h-[400px] bg-gray-200 relative border-b-2 border-[#000000]">
-                                <iframe 
-                                title="Google Map" 
-                                width="100%" 
-                                height="100%" 
-                                frameBorder="0" 
-                                scrolling="no" 
-                                src={getMapUrl(schedule[selectedDay-1].events, schedule[selectedDay-1].city)} 
-                                className="opacity-100"
-                                ></iframe>
+                                <iframe title="Google Map" width="100%" height="100%" frameBorder="0" scrolling="no" src={getMapUrl(data.schedule[selectedDay-1].events, data.schedule[selectedDay-1].city)} className="opacity-100"></iframe>
                             </div>
                             <div className="bg-[#FEF0E4] p-0">
                                 <div className="sticky top-0 bg-[#E0C3FC] border-b-2 border-[#000000] p-4">
-                                <p className="text-xs font-black text-[#000000] uppercase tracking-widest flex items-center gap-2">
-                                    <MapPinIcon size={16} /> Day {selectedDay} Locations
-                                </p>
+                                <p className="text-xs font-black text-[#000000] uppercase tracking-widest flex items-center gap-2"><MapPinIcon size={16} /> Day {selectedDay} Locations</p>
                                 </div>
                                 <div className="divide-y-2 divide-[#000000]">
-                                {schedule[selectedDay-1].events.map((event, idx) => (
+                                {data.schedule[selectedDay-1].events.map((event, idx) => (
                                     <div key={idx} className="flex justify-between items-center w-full px-6 py-4 group hover:bg-[#000000] hover:text-[#FEF0E4] transition-colors cursor-pointer">
-                                        <button 
-                                        onClick={() => setSelectedLocation(event.desc.split('(')[0])} 
-                                        className="text-left text-base flex-1"
-                                        >
-                                        <span className="truncate font-bold tracking-tight">{event.desc}</span>
-                                        </button>
-                                        {isEditMode && (
-                                            <button onClick={(e) => deleteEvent(selectedDay-1, event.id, e)} className="text-red-500 hover:text-red-300 ml-2">
-                                                <ThinTrash />
-                                            </button>
-                                        )}
+                                        <button onClick={() => setSelectedLocation(event.desc.split('(')[0])} className="text-left text-base flex-1"><span className="truncate font-bold tracking-tight">{event.desc}</span></button>
+                                        {isEditMode && <button onClick={(e) => deleteEvent(selectedDay-1, event.id, e)} className="text-red-500 hover:text-red-300 ml-2"><ThinTrash /></button>}
                                     </div>
                                 ))}
                                 </div>
@@ -1032,82 +657,44 @@
                     </div>
                     )}
 
-                    {/* === TAB: CURATION (RECOMMEND) === */}
                     {activeTab === 'curation' && (
                     <div className="flex flex-col">
                         <div className="flex border-b-2 border-[#000000]">
-                        {[
-                            { id: 'places', label: 'PLACES' },
-                            { id: 'shopping', label: 'SHOPPING' },
-                            { id: 'cooking', label: 'COOKING' }
-                        ].map(sub => (
-                            <button
-                            key={sub.id}
-                            onClick={() => setRecommendSubTab(sub.id)}
-                            className={`flex-1 py-3 text-xs font-black tracking-tight transition-all border-r-2 border-[#000000] last:border-r-0 ${
-                                recommendSubTab === sub.id 
-                                ? 'bg-[#000000] text-[#FEF0E4]' 
-                                : 'bg-[#FEF0E4] text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'
-                            }`}
-                            >
-                            {sub.label}
-                            </button>
+                        {[{ id: 'places', label: 'PLACES' }, { id: 'shopping', label: 'SHOPPING' }, { id: 'cooking', label: 'COOKING' }].map(sub => (
+                            <button key={sub.id} onClick={() => setRecommendSubTab(sub.id)} className={`flex-1 py-3 text-xs font-black tracking-tight transition-all border-r-2 border-[#000000] last:border-r-0 ${recommendSubTab === sub.id ? 'bg-[#000000] text-[#FEF0E4]' : 'bg-[#FEF0E4] text-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4]'}`}>{sub.label}</button>
                         ))}
                         </div>
-
                         {(recommendSubTab === 'places' || recommendSubTab === 'shopping') && (
                             <div className="flex flex-col">
-                                {recommendations[recommendSubTab].map((data, idx) => (
-                                    <div key={data.id} className="bg-[#FEF0E4] flex flex-col">
+                                {data.recommendations[recommendSubTab].map((dataGroup, idx) => (
+                                    <div key={dataGroup.id} className="bg-[#FEF0E4] flex flex-col">
                                         <div className="px-6 py-4 border-b-2 border-[#000000] flex items-center justify-between bg-[#E0C3FC] text-[#000000]">
-                                            <h3 className="font-black text-2xl uppercase tracking-tighter">{data.city}</h3>
+                                            <h3 className="font-black text-2xl uppercase tracking-tighter">{dataGroup.city}</h3>
                                         </div>
                                         <div className="flex flex-col">
-                                            {data.items.map((item, i) => (
+                                            {dataGroup.items.map((item, i) => (
                                                 <div key={item.id} className="px-6 py-5 border-b-2 border-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4] transition-colors group cursor-default relative">
                                                     <div className="flex justify-between items-baseline mb-1">
                                                         {isEditMode ? (
-                                                            <input 
-                                                                value={item.name} 
-                                                                onChange={(e) => updateRecommendation(recommendSubTab, data.id, item.id, 'name', e.target.value)}
-                                                                className="font-black text-lg uppercase bg-transparent border-b-2 border-[#000000] focus:outline-none w-full mr-2"
-                                                            />
+                                                            <input value={item.name} onChange={(e) => updateRecommendation(recommendSubTab, dataGroup.id, item.id, 'name', e.target.value)} className="font-black text-lg uppercase bg-transparent border-b-2 border-[#000000] focus:outline-none w-full mr-2" />
                                                         ) : (
-                                                            <span className="font-black text-xl uppercase tracking-tight leading-none">{item.name}</span>
+                                                            <span className="font-black text-lg sm:text-xl uppercase tracking-tight leading-none">{item.name}</span>
                                                         )}
                                                     </div>
                                                     {isEditMode ? (
-                                                        <input 
-                                                            value={item.desc} 
-                                                            onChange={(e) => updateRecommendation(recommendSubTab, data.id, item.id, 'desc', e.target.value)}
-                                                            className="text-sm font-bold w-full bg-transparent border-b-2 border-[#000000] focus:outline-none"
-                                                        />
+                                                        <input value={item.desc} onChange={(e) => updateRecommendation(recommendSubTab, dataGroup.id, item.id, 'desc', e.target.value)} className="text-sm font-bold w-full bg-transparent border-b-2 border-[#000000] focus:outline-none" />
                                                     ) : (
                                                         <span className="text-sm font-bold opacity-80 group-hover:opacity-100 block">{item.desc}</span>
                                                     )}
-                                                    {isEditMode && (
-                                                        <button onClick={(e) => deleteRecommendation(recommendSubTab, data.id, item.id, e)} className="absolute right-4 top-4 text-red-500">
-                                                            <ThinTrash />
-                                                        </button>
-                                                    )}
+                                                    {isEditMode && <button onClick={(e) => deleteRecommendation(recommendSubTab, dataGroup.id, item.id, e)} className="absolute right-4 top-4 text-red-500"><ThinTrash /></button>}
                                                 </div>
                                             ))}
                                             {isEditMode && (
                                                 <div className="p-4 border-b-2 border-[#000000] bg-[#FEF0E4] flex flex-col gap-2">
-                                                        <input 
-                                                            placeholder="이름" 
-                                                            value={newRec.name} 
-                                                            onChange={(e) => setNewRec({...newRec, name: e.target.value})}
-                                                            className="p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]" 
-                                                        />
+                                                        <input placeholder="이름" value={newRec.name} onChange={(e) => setNewRec({...newRec, name: e.target.value})} className="p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]" />
                                                         <div className="flex gap-2">
-                                                            <input 
-                                                                placeholder="설명" 
-                                                                value={newRec.desc} 
-                                                                onChange={(e) => setNewRec({...newRec, desc: e.target.value})}
-                                                                className="flex-1 p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]" 
-                                                            />
-                                                            <button onClick={() => addRecommendation(recommendSubTab, data.id)} className="bg-[#000000] text-[#FEF0E4] px-3 py-1 text-xs font-black uppercase">추가</button>
+                                                            <input placeholder="설명" value={newRec.desc} onChange={(e) => setNewRec({...newRec, desc: e.target.value})} className="flex-1 p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4]" />
+                                                            <button onClick={() => addRecommendation(recommendSubTab, dataGroup.id)} className="bg-[#000000] text-[#FEF0E4] px-3 py-1 text-xs font-black uppercase">추가</button>
                                                         </div>
                                                 </div>
                                             )}
@@ -1116,77 +703,39 @@
                                 ))}
                             </div>
                         )}
-
                         {recommendSubTab === 'cooking' && (
                         <div className="flex flex-col bg-[#FEF0E4]">
                             <div className="border-b-2 border-[#000000] p-6 relative bg-[#E0C3FC]">
-                                <div className="absolute -top-3 left-6 bg-[#E0C3FC] px-2 border-2 border-[#000000]">
-                                    <MinimalChefHat />
-                                </div>
+                                <div className="absolute -top-3 left-6 bg-[#E0C3FC] px-2 border-2 border-[#000000]"><MinimalChefHat /></div>
                                 <h3 className="font-black text-xl uppercase mb-1 mt-2 tracking-tighter">Parisian Dining</h3>
-                                <p className="text-sm font-bold leading-tight opacity-100">
-                                    파리 현지 마트(Monoprix, Franprix)나 시장에서 신선한 재료를 사서 에어비앤비에서 요리해 보세요.
-                                </p>
+                                <p className="text-sm font-bold leading-tight opacity-100">파리 현지 마트(Monoprix, Franprix)나 시장에서 신선한 재료를 사서 에어비앤비에서 요리해 보세요.</p>
                             </div>
-                            
-                            {recommendations.cooking.map((menu, idx) => (
+                            {data.recommendations.cooking.map((menu, idx) => (
                             <div key={menu.id} className="border-b-2 border-[#000000] p-6 relative group hover:bg-[#000000] hover:text-[#FEF0E4] transition-colors">
                                 {isEditMode ? (
-                                    <input 
-                                        value={menu.title} 
-                                        onChange={(e) => updateCookingMenu(menu.id, 'title', e.target.value)}
-                                        className="font-black text-2xl mb-2 uppercase bg-transparent border-b-2 border-[#000000] w-full"
-                                    />
+                                    <input value={menu.title} onChange={(e) => updateCookingMenu(menu.id, 'title', e.target.value)} className="font-black text-xl sm:text-2xl mb-2 uppercase bg-transparent border-b-2 border-[#000000] w-full" />
                                 ) : (
-                                    <h4 className="font-black text-2xl mb-2 uppercase tracking-tighter">{menu.title}</h4>
+                                    <h4 className="font-black text-xl sm:text-2xl mb-2 uppercase tracking-tighter">{menu.title}</h4>
                                 )}
-                                
                                 {isEditMode ? (
-                                    <input 
-                                        value={menu.desc} 
-                                        onChange={(e) => updateCookingMenu(menu.id, 'desc', e.target.value)}
-                                        className="text-sm mb-4 font-bold w-full bg-transparent border-b-2 border-[#000000]"
-                                    />
+                                    <input value={menu.desc} onChange={(e) => updateCookingMenu(menu.id, 'desc', e.target.value)} className="text-sm mb-4 font-bold w-full bg-transparent border-b-2 border-[#000000]" />
                                 ) : (
                                     <p className="text-sm mb-4 font-bold opacity-80 leading-relaxed">{menu.desc}</p>
                                 )}
-
                                 <div className="flex flex-wrap gap-2">
                                     {menu.items.map((ing, i) => (
-                                    <span key={i} className="text-xs border-2 border-current px-2 py-1 uppercase tracking-wide font-bold">
-                                        {ing}
-                                    </span>
+                                    <span key={i} className="text-xs border-2 border-current px-2 py-1 uppercase tracking-wide font-bold">{ing}</span>
                                     ))}
                                 </div>
-                                {isEditMode && (
-                                    <button onClick={(e) => deleteCookingMenu(menu.id, e)} className="absolute right-4 top-6 text-red-500">
-                                        <ThinTrash />
-                                    </button>
-                                )}
+                                {isEditMode && <button onClick={(e) => deleteCookingMenu(menu.id, e)} className="absolute right-4 top-6 text-red-500"><ThinTrash /></button>}
                             </div>
                             ))}
-
                             {isEditMode && (
                                 <div className="border-b-2 border-[#000000] p-6 bg-[#FEF0E4]">
                                     <h4 className="text-sm font-black mb-2 uppercase">새 메뉴 추가</h4>
-                                    <input 
-                                        placeholder="메뉴 이름" 
-                                        value={newCooking.title} 
-                                        onChange={(e) => setNewCooking({...newCooking, title: e.target.value})}
-                                        className="w-full p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] mb-2" 
-                                    />
-                                    <input 
-                                        placeholder="설명" 
-                                        value={newCooking.desc} 
-                                        onChange={(e) => setNewCooking({...newCooking, desc: e.target.value})}
-                                        className="w-full p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] mb-2" 
-                                    />
-                                    <input 
-                                        placeholder="재료 (쉼표로 구분)" 
-                                        value={newCooking.ingredients} 
-                                        onChange={(e) => setNewCooking({...newCooking, ingredients: e.target.value})}
-                                        className="w-full p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] mb-2" 
-                                    />
+                                    <input placeholder="메뉴 이름" value={newCooking.title} onChange={(e) => setNewCooking({...newCooking, title: e.target.value})} className="w-full p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] mb-2" />
+                                    <input placeholder="설명" value={newCooking.desc} onChange={(e) => setNewCooking({...newCooking, desc: e.target.value})} className="w-full p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] mb-2" />
+                                    <input placeholder="재료 (쉼표로 구분)" value={newCooking.ingredients} onChange={(e) => setNewCooking({...newCooking, ingredients: e.target.value})} className="w-full p-2 text-xs font-bold border-2 border-[#000000] bg-[#FEF0E4] mb-2" />
                                     <button onClick={addCookingMenu} className="bg-[#000000] text-[#FEF0E4] px-3 py-2 text-xs w-full font-black uppercase">메뉴 추가</button>
                                 </div>
                             )}
@@ -1195,121 +744,53 @@
                     </div>
                     )}
 
-                    {/* === TAB: CHECKLIST === */}
                     {activeTab === 'checklist' && (
                     <div className="flex flex-col bg-[#FEF0E4]">
                         <div className="border-b-2 border-[#000000] p-6 bg-[#E0C3FC] text-[#000000] shrink-0">
-                            <h3 className="font-black text-lg mb-3 flex items-center gap-2 uppercase tracking-wide">
-                                <AlertTriangleIcon size={20} /> Notice
-                            </h3>
+                            <h3 className="font-black text-lg mb-3 flex items-center gap-2 uppercase tracking-wide"><AlertTriangleIcon size={20} /> Notice</h3>
                             <ul className="text-sm space-y-2 list-disc list-inside font-bold leading-relaxed">
-                                {notices.map(notice => (
+                                {data.notices.map(notice => (
                                     <li key={notice.id} className="flex items-center justify-between group">
                                         {isEditMode && editingNoticeId === notice.id ? (
-                                            <input
-                                                value={tempNoticeText}
-                                                onChange={(e) => setTempNoticeText(e.target.value)}
-                                                onBlur={() => saveEditingNotice(notice.id)}
-                                                onKeyPress={(e) => e.key === 'Enter' && saveEditingNotice(notice.id)}
-                                                className="flex-1 bg-transparent border-b-2 border-[#000000] text-[#000000] text-sm font-bold focus:outline-none"
-                                                autoFocus
-                                            />
+                                            <input value={tempNoticeText} onChange={(e) => setTempNoticeText(e.target.value)} onBlur={() => saveEditingNotice(notice.id)} onKeyPress={(e) => e.key === 'Enter' && saveEditingNotice(notice.id)} className="flex-1 bg-transparent border-b-2 border-[#000000] text-[#000000] text-sm font-bold focus:outline-none" autoFocus />
                                         ) : (
-                                            <span onClick={() => startEditingNotice(notice.id, notice.text)} className={isEditMode ? "cursor-pointer hover:underline" : ""}>
-                                                {notice.text}
-                                            </span>
+                                            <span onClick={() => startEditingNotice(notice.id, notice.text)} className={isEditMode ? "cursor-pointer hover:underline" : ""}>{notice.text}</span>
                                         )}
-                                        
-                                        {isEditMode && (
-                                            <button onClick={() => deleteNotice(notice.id)} className="text-red-500 hover:text-red-700 ml-2">
-                                                <ThinTrash size={14} />
-                                            </button>
-                                        )}
+                                        {isEditMode && <button onClick={() => deleteNotice(notice.id)} className="text-red-500 hover:text-red-700 ml-2"><ThinTrash size={14} /></button>}
                                     </li>
                                 ))}
                             </ul>
                             {isEditMode && (
                                 <div className="mt-4 flex gap-2">
-                                    <input 
-                                        value={newNoticeText}
-                                        onChange={(e) => setNewNoticeText(e.target.value)}
-                                        placeholder="새 공지사항"
-                                        className="flex-1 p-2 text-xs font-bold bg-[#FEF0E4] border-2 border-[#000000] text-[#000000] placeholder-gray-500"
-                                    />
+                                    <input value={newNoticeText} onChange={(e) => setNewNoticeText(e.target.value)} placeholder="새 공지사항" className="flex-1 p-2 text-xs font-bold bg-[#FEF0E4] border-2 border-[#000000] text-[#000000] placeholder-gray-500" />
                                     <button onClick={addNotice} className="text-xs border-2 border-[#000000] px-3 bg-[#FEF0E4] hover:bg-[#000000] hover:text-[#FEF0E4] transition-colors"><PlusIcon size={16} /></button>
                                 </div>
                             )}
                         </div>
-
-                        {/* Add New Item Input */}
                         <div className="p-4 border-b-2 border-[#000000] flex gap-2 shrink-0 bg-[#FEF0E4]">
-                            <input 
-                            type="text" 
-                            value={newItemText}
-                            onChange={(e) => setNewItemText(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && addChecklistItem()}
-                            placeholder="ADD NEW ITEM..."
-                            className="flex-1 bg-[#FEF0E4] border-2 border-[#000000] px-4 py-3 text-sm font-bold placeholder-gray-500 outline-none focus:bg-[#E0C3FC] transition-colors uppercase"
-                            />
-                            <button 
-                            onClick={addChecklistItem}
-                            className="bg-[#000000] text-[#FEF0E4] px-4 py-3 border-2 border-[#000000] hover:bg-[#E0C3FC] hover:text-[#000000] transition-colors"
-                            >
-                            <PlusIcon size={20} />
-                            </button>
+                            <input type="text" value={newItemText} onChange={(e) => setNewItemText(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addChecklistItem()} placeholder="ADD NEW ITEM..." className="flex-1 bg-[#FEF0E4] border-2 border-[#000000] px-4 py-3 text-base font-bold placeholder-gray-500 outline-none focus:bg-[#E0C3FC] transition-colors uppercase" />
+                            <button onClick={addChecklistItem} className="bg-[#000000] text-[#FEF0E4] px-4 py-3 border-2 border-[#000000] hover:bg-[#E0C3FC] hover:text-[#000000] transition-colors"><PlusIcon size={20} /></button>
                         </div>
-
                         <div className="flex flex-col bg-[#FEF0E4]">
                         {sortedChecklistItems.map((item) => (
-                            <div 
-                            key={item.id} 
-                            onClick={() => toggleCheck(item.id)}
-                            className={`px-6 py-5 flex items-center gap-4 cursor-pointer transition-all border-b-2 border-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4] group ${item.checked ? 'bg-[#FEF0E4] opacity-50' : ''}`}
-                            >
-                            <div className={`w-6 h-6 border-2 flex items-center justify-center shrink-0 transition-colors ${
-                                item.checked ? 'bg-[#000000] border-[#000000] group-hover:bg-[#FEF0E4] group-hover:border-[#FEF0E4]' : 'border-[#000000] group-hover:border-[#FEF0E4]'
-                            }`}>
+                            <div key={item.id} onClick={() => toggleCheck(item.id)} className={`px-6 py-5 flex items-center gap-4 cursor-pointer transition-all border-b-2 border-[#000000] hover:bg-[#000000] hover:text-[#FEF0E4] group ${item.checked ? 'bg-[#FEF0E4] opacity-50' : ''}`}>
+                            <div className={`w-6 h-6 border-2 flex items-center justify-center shrink-0 transition-colors ${item.checked ? 'bg-[#000000] border-[#000000] group-hover:bg-[#FEF0E4] group-hover:border-[#FEF0E4]' : 'border-[#000000] group-hover:border-[#FEF0E4]'}`}>
                                 {item.checked && <CheckSquareIcon size={16} />}
                             </div>
                             <div className="flex-1 flex justify-between items-center">
                                 {editingChecklistId === item.id && isEditMode ? (
-                                <input
-                                    type="text"
-                                    value={tempChecklistText}
-                                    onChange={(e) => setTempChecklistText(e.target.value)}
-                                    onBlur={() => saveEditingChecklist(item.id)}
-                                    onKeyPress={(e) => e.key === 'Enter' && saveEditingChecklist(item.id)}
-                                    className="flex-1 bg-transparent border-b-2 border-[#000000] text-lg font-black focus:outline-none"
-                                    autoFocus
-                                    onClick={(e) => e.stopPropagation()}
-                                />
+                                <input type="text" value={tempChecklistText} onChange={(e) => setTempChecklistText(e.target.value)} onBlur={() => saveEditingChecklist(item.id)} onKeyPress={(e) => e.key === 'Enter' && saveEditingChecklist(item.id)} className="flex-1 bg-transparent border-b-2 border-[#000000] text-lg font-black focus:outline-none" autoFocus onClick={(e) => e.stopPropagation()} />
                                 ) : (
-                                <div 
-                                    onClick={(e) => {
-                                    if (isEditMode) {
-                                        e.stopPropagation();
-                                        startEditingChecklist(item.id, item.text);
-                                    }
-                                    }}
-                                    className={`text-lg font-black flex-1 uppercase tracking-tight ${item.checked ? 'line-through decoration-2 decoration-[#000000] group-hover:decoration-[#FEF0E4]' : ''}`}
-                                >
-                                {item.text}
-                                </div>
+                                <div onClick={(e) => { if (isEditMode) { e.stopPropagation(); startEditingChecklist(item.id, item.text); } }} className={`text-lg font-black flex-1 uppercase tracking-tight ${item.checked ? 'line-through decoration-2 decoration-[#000000] group-hover:decoration-[#FEF0E4]' : ''}`}>{item.text}</div>
                                 )}
-
                                 {!item.checked && item.important && <span className="text-[10px] border-2 border-red-500 text-red-500 px-2 py-0.5 font-bold uppercase group-hover:border-[#FEF0E4] group-hover:text-[#FEF0E4] ml-2">Important</span>}
-                                {(parseInt(item.id) > 1000 || isEditMode) && (
-                                    <button onClick={(e) => deleteChecklistItem(e, item.id)} className="text-gray-400 hover:text-red-500 group-hover:text-[#FEF0E4] group-hover:hover:text-red-300 ml-4">
-                                        <ThinTrash size={18} />
-                                    </button>
-                                )}
+                                {(parseInt(item.id) > 1000 || isEditMode) && <button onClick={(e) => deleteChecklistItem(e, item.id)} className="text-gray-400 hover:text-red-500 group-hover:text-[#FEF0E4] group-hover:hover:text-red-300 ml-4"><ThinTrash size={18} /></button>}
                             </div>
                             </div>
                         ))}
                         </div>
                     </div>
                     )}
-
                 </div>
                 </div>
             );
